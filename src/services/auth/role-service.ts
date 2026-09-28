@@ -9,7 +9,7 @@ import { AuditService } from "@/services/audit/audit-service";
 import { Role, User } from "@/models";
 import type { CreateRoleInput, UpdateRoleInput } from "@/lib/validation/roles";
 
-type AuditInput = AuditRequestContext & { actorUserId: Types.ObjectId };
+type AuditInput = AuditRequestContext & { actorUserId: Types.ObjectId; actorIsSuperAdmin?: boolean };
 
 function roleSnapshot(role: { name: string; slug: string; description?: string; baseRole: string; permissions: readonly string[]; isSystem: boolean; isActive: boolean }) {
   return { name: role.name, slug: role.slug, description: role.description ?? null, baseRole: role.baseRole, permissions: [...role.permissions], isSystem: role.isSystem, isActive: role.isActive };
@@ -53,8 +53,17 @@ export class RoleService {
         const before = roleSnapshot(role);
 
         if (role.isSystem) {
-          if (input.name !== undefined || input.slug !== undefined || input.baseRole !== undefined || input.isActive === false) {
-            throw errors.conflict("System role identity and active status cannot be changed.");
+          if (input.name !== undefined || input.slug !== undefined || input.baseRole !== undefined) {
+            throw errors.conflict("System role identity cannot be changed.");
+          }
+          if (input.isActive !== undefined) {
+            if (role.baseRole === "SUPER_ADMIN") {
+              throw errors.conflict("The SUPER_ADMIN system role must remain active.");
+            }
+            if (!audit.actorIsSuperAdmin) {
+              throw errors.forbidden("Only a Super Admin can change a built-in role's status.");
+            }
+            role.isActive = input.isActive;
           }
           if (role.baseRole === "SUPER_ADMIN" && input.permissions && input.permissions.length) {
             throw errors.badRequest("SUPER_ADMIN access is implicit and cannot store permissions.");

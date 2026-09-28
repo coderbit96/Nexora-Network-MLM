@@ -17,11 +17,17 @@ const RoleSchema = new Schema<IRole>({
       message: "Role permissions must be permission keys from the centralized catalog.",
     },
   },
-  isSystem: { type: Boolean, required: true, default: false, immutable: true },
+  // Mongoose applies an immutable default while hydrating existing documents in
+  // some versions, which prevents any update to a system role. Mutations are
+  // instead rejected below for both document and query update paths.
+  isSystem: { type: Boolean, required: true, default: false },
   isActive: { type: Boolean, required: true, default: true },
 }, schemaOptions);
 
 RoleSchema.pre("validate", function () {
+  if (!this.isNew && this.isModified("isSystem")) {
+    this.invalidate("isSystem", "The system-role flag cannot be changed.");
+  }
   if (!this.isSystem) {
     if ((APPLICATION_ROLES as readonly string[]).includes(this.name)) {
       this.invalidate("name", "Base role names are reserved for system roles.");
@@ -35,6 +41,9 @@ RoleSchema.pre("validate", function () {
   const expectedSlug = SYSTEM_ROLE_SLUGS[this.baseRole];
   if (this.name !== this.baseRole) this.invalidate("name", "System role names must match their base role.");
   if (this.slug !== expectedSlug) this.invalidate("slug", "System role slug does not match its base role.");
+  if (this.baseRole === "SUPER_ADMIN" && !this.isActive) {
+    this.invalidate("isActive", "The SUPER_ADMIN system role must remain active to preserve recovery access.");
+  }
   if (this.baseRole === "SUPER_ADMIN" && this.permissions.length > 0) {
     this.invalidate("permissions", "SUPER_ADMIN permissions are granted implicitly and must not be persisted.");
   }
@@ -66,9 +75,9 @@ RoleSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "replaceOne"], as
       throw new Error("Role permissions must be permission keys from the centralized catalog.");
     }
   }
-  if (changes.isActive === false) {
+  if (changes.isActive !== undefined) {
     const systemRole = await this.model.exists({ ...this.getFilter(), isSystem: true });
-    if (systemRole) throw new Error("System roles cannot be deactivated.");
+    if (systemRole) throw new Error("System role status must be changed through the authorized role service.");
   }
 });
 
@@ -76,4 +85,12 @@ RoleSchema.index({ slug: 1 }, { unique: true });
 RoleSchema.index({ name: 1 }, { unique: true });
 RoleSchema.index({ baseRole: 1, isActive: 1 });
 RoleSchema.index({ permissions: 1 });
+
+// Next.js development hot reload can retain a previously compiled Mongoose
+// model. Remove only the obsolete definition that used the old immutable
+// `isSystem` field so a running dev server adopts the safe validation guards.
+const cachedRole = models.Role as Model<IRole> | undefined;
+if (cachedRole?.schema.path("isSystem")?.options.immutable === true) {
+  delete models.Role;
+}
 export const Role: Model<IRole> = (models.Role as Model<IRole>) || model<IRole>("Role", RoleSchema);

@@ -16,7 +16,7 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay asChild><motion.div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px]" initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduceMotion ? 0 : 0.15 }} /></DialogPrimitive.Overlay>
       <DialogPrimitive.Content asChild {...props}>
-        <motion.div className={cn("fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-2xl border bg-background p-5 shadow-2xl sm:p-6", className)} initial={reduceMotion ? false : { opacity: 0, scale: 0.98, y: "-47%" }} animate={{ opacity: 1, scale: 1, y: "-50%" }} transition={{ duration: reduceMotion ? 0 : 0.16, ease: "easeOut" }}>
+        <motion.div className={cn("fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 gap-4 overflow-y-auto rounded-2xl border bg-background p-5 shadow-2xl sm:p-6", className)} initial={reduceMotion ? false : { opacity: 0, scale: 0.98, y: "-47%" }} animate={{ opacity: 1, scale: 1, y: "-50%" }} transition={{ duration: reduceMotion ? 0 : 0.16, ease: "easeOut" }}>
           {children}
           <DialogPrimitive.Close className="absolute right-4 top-4 grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
             <X className="size-4" /><span className="sr-only">Close</span>

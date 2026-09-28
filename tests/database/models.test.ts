@@ -40,5 +40,11 @@ test("roles accept only catalog permission keys and reserve the super-admin gran
   const superAdminWithStoredGrant = new Role({ name: "SUPER_ADMIN", slug: "super-admin", baseRole: "SUPER_ADMIN", isSystem: true, isActive: true, permissions: [PERMISSION.WALLET.ADJUST] });
   await assert.rejects(superAdminWithStoredGrant.validate(), /granted implicitly/i);
 
+  const inactiveSuperAdmin = new Role({ name: "SUPER_ADMIN", slug: "super-admin", baseRole: "SUPER_ADMIN", isSystem: true, isActive: false, permissions: [] });
+  await assert.rejects(inactiveSuperAdmin.validate(), /must remain active/i);
+
+  const hydratedSystemRole = Role.hydrate({ _id: new Types.ObjectId(), name: "ADMIN", slug: "admin", baseRole: "ADMIN", isSystem: true, isActive: true, permissions: [] });
+  await hydratedSystemRole.validate();
+
   await assert.rejects(Role.updateOne({}, { $set: { permissions: ["wallet.anything"] } }).exec(), /centralized catalog/i);
 });
