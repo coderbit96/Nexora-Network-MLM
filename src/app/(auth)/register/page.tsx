@@ -1,0 +1,2 @@
+import { RegistrationForm } from "@/components/auth/auth-forms";
+export default function RegisterPage() { return <><p className="text-sm font-semibold text-primary">Create account</p><h1 className="mt-3 text-3xl font-bold tracking-tight">Build your network with clarity.</h1><p className="mt-3 text-muted-foreground">Your email verification protects your account and activates your workspace.</p><RegistrationForm /></>; }

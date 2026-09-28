@@ -1,0 +1,20 @@
+import "server-only";
+
+import type { Types } from "mongoose";
+
+import { errors } from "@/lib/errors/app-error";
+import { Cart, Category, Order, Product } from "@/models";
+import type { IOrder, OrderStatus } from "@/types/domain";
+import { MAX_INTERACTIVE_PAGE } from "@/config/pagination";
+
+const statuses: readonly OrderStatus[] = ["PENDING", "PAYMENT_PENDING", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED"];
+export type OrderFilters = { status?: OrderStatus; page: number; limit: number };
+export function parseOrderFilters(params: URLSearchParams): OrderFilters { const status = params.get("status") || undefined; if (status && !statuses.includes(status as OrderStatus)) throw errors.badRequest("Invalid order status."); const page = Number(params.get("page") ?? 1); const limit = Number(params.get("limit") ?? 20); if (!Number.isSafeInteger(page) || !Number.isSafeInteger(limit) || page < 1 || page > MAX_INTERACTIVE_PAGE || limit < 1 || limit > 100) throw errors.badRequest("Invalid order pagination."); return { ...(status ? { status: status as OrderStatus } : {}), page, limit }; }
+
+export function serializeOrder(order: IOrder & { _id: Types.ObjectId }) { return { id: String(order._id), orderNumber: order.orderNumber, currency: order.currency, status: order.status, paymentStatus: order.paymentStatus, commissionStatus: order.commissionStatus, subtotalMinor: order.subtotalMinor.toString(), discountMinor: order.discountMinor.toString(), taxMinor: order.taxMinor.toString(), totalMinor: order.totalMinor.toString(), createdAt: order.createdAt.toISOString(), ...(order.paidAt ? { paidAt: order.paidAt.toISOString() } : {}), items: order.items.map((item) => ({ productId: String(item.productId), sku: item.sku, name: item.name, quantity: item.quantity, unitPriceMinor: item.unitPriceMinor.toString(), lineTotalMinor: item.lineTotalMinor.toString(), pv: item.pv.toString(), bv: item.bv.toString(), commissionEligible: item.commissionEligible })) }; }
+
+export async function memberOrders(memberProfileId: Types.ObjectId, filters: OrderFilters) { const query = { memberProfileId, ...(filters.status ? { status: filters.status } : {}) }; const [orders, total] = await Promise.all([Order.find(query).sort({ createdAt: -1 }).skip((filters.page - 1) * filters.limit).limit(filters.limit).lean(), Order.countDocuments(query)]); return { orders, total, page: filters.page, limit: filters.limit, totalPages: Math.max(1, Math.ceil(total / filters.limit)) }; }
+
+export async function memberOrder(memberProfileId: Types.ObjectId, id: string) { const order = await Order.findOne({ _id: id, memberProfileId }).lean(); if (!order) throw errors.notFound("Order was not found."); return order; }
+
+export async function cartOverview(memberProfileId: Types.ObjectId) { const cart = await Cart.findOne({ memberProfileId }).lean(); if (!cart?.items.length) return { items: [], subtotalMinor: 0n, currency: "INR" }; const products = await Product.find({ _id: { $in: cart.items.map((item) => item.productId) }, status: "ACTIVE" }).lean(); const categories = await Category.find({ _id: { $in: products.map((product) => product.categoryId) }, status: "ACTIVE" }).select("_id").lean(); const categoryIds = new Set(categories.map((category) => String(category._id))); const byId = new Map(products.map((product) => [String(product._id), product])); const items = cart.items.flatMap((item) => { const product = byId.get(String(item.productId)); if (!product || !categoryIds.has(String(product.categoryId))) return []; const unitPriceMinor = product.salePriceMinor ?? product.priceMinor; return [{ productId: String(product._id), name: product.name, sku: product.sku, imageUrl: product.imageUrls[0] ?? null, quantity: item.quantity, stockQuantity: product.stockQuantity, unitPriceMinor, lineTotalMinor: unitPriceMinor * BigInt(item.quantity), currency: product.currency }]; }); const currency = items[0]?.currency ?? "INR"; return { items: items.filter((item) => item.currency === currency), subtotalMinor: items.filter((item) => item.currency === currency).reduce((total, item) => total + item.lineTotalMinor, 0n), currency }; }

@@ -1,0 +1,2 @@
+import { VerifyEmailFlow } from "@/components/auth/verification-flow";
+export default function VerifyEmailPage() { return <><p className="text-sm font-semibold text-primary">Email verification</p><h1 className="mt-3 text-3xl font-bold tracking-tight">Verify your email address.</h1><p className="mt-3 text-muted-foreground">Verification is required before your workspace becomes active.</p><VerifyEmailFlow /></>; }

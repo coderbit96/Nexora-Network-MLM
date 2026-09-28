@@ -1,0 +1,2 @@
+import { ReferralPanel } from "@/components/member/member-data";
+export default function ReferralPage() { return <><div className="mb-8"><p className="text-sm font-semibold text-primary">Referral center</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Invite your network</h1><p className="mt-2 text-muted-foreground">Share your unique link and track referral growth.</p></div><ReferralPanel /></>; }

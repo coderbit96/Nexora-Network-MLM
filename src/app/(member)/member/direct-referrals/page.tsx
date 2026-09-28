@@ -1,0 +1,2 @@
+import { DirectReferralsPanel } from "@/components/member/member-data";
+export default function DirectReferralsPage() { return <><div className="mb-8"><p className="text-sm font-semibold text-primary">Network</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Direct referrals</h1><p className="mt-2 text-muted-foreground">Members who enrolled directly through your referral relationship.</p></div><DirectReferralsPanel /></>; }

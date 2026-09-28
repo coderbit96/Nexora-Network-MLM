@@ -1,0 +1,103 @@
+import "server-only";
+
+import { startSession, Types } from "mongoose";
+
+import { connectToDatabase } from "@/lib/db/mongoose";
+import { errors } from "@/lib/errors/app-error";
+import type { AuditRequestContext } from "@/services/audit/audit-service";
+import { AuditService } from "@/services/audit/audit-service";
+import { Role, User } from "@/models";
+import type { CreateRoleInput, UpdateRoleInput } from "@/lib/validation/roles";
+
+type AuditInput = AuditRequestContext & { actorUserId: Types.ObjectId };
+
+function roleSnapshot(role: { name: string; slug: string; description?: string; baseRole: string; permissions: readonly string[]; isSystem: boolean; isActive: boolean }) {
+  return { name: role.name, slug: role.slug, description: role.description ?? null, baseRole: role.baseRole, permissions: [...role.permissions], isSystem: role.isSystem, isActive: role.isActive };
+}
+
+export class RoleService {
+  static async create(input: CreateRoleInput, audit: AuditInput) {
+    await connectToDatabase();
+    const session = await startSession();
+    try {
+      let createdId: string | undefined;
+      await session.withTransaction(async () => {
+        const duplicate = await Role.exists({ $or: [{ slug: input.slug }, { name: input.name }] }).session(session);
+        if (duplicate) throw errors.conflict("A role with that name or slug already exists.");
+        const [role] = await Role.create([{
+          name: input.name,
+          slug: input.slug,
+          ...(input.description ? { description: input.description } : {}),
+          baseRole: input.baseRole,
+          permissions: input.permissions,
+          isSystem: false,
+          isActive: true,
+        }], { session });
+        createdId = String(role._id);
+        await AuditService.record({ ...audit, action: "role.created", resourceType: "Role", resourceId: createdId, after: roleSnapshot(role) }, session);
+      });
+      if (!createdId) throw new Error("Role creation did not complete.");
+      return { id: createdId };
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  static async update(roleId: string, input: UpdateRoleInput, audit: AuditInput) {
+    await connectToDatabase();
+    const session = await startSession();
+    try {
+      await session.withTransaction(async () => {
+        const role = await Role.findById(roleId).session(session);
+        if (!role) throw errors.notFound("Role was not found.");
+        const before = roleSnapshot(role);
+
+        if (role.isSystem) {
+          if (input.name !== undefined || input.slug !== undefined || input.baseRole !== undefined || input.isActive === false) {
+            throw errors.conflict("System role identity and active status cannot be changed.");
+          }
+          if (role.baseRole === "SUPER_ADMIN" && input.permissions && input.permissions.length) {
+            throw errors.badRequest("SUPER_ADMIN access is implicit and cannot store permissions.");
+          }
+        } else {
+          if (input.name !== undefined && input.name !== role.name) {
+            const duplicate = await Role.exists({ name: input.name, _id: { $ne: role._id } }).session(session);
+            if (duplicate) throw errors.conflict("A role with that name already exists.");
+            role.name = input.name;
+          }
+          if (input.slug !== undefined && input.slug !== role.slug) {
+            throw errors.conflict("A role slug is permanent once created.");
+          }
+          if (input.baseRole !== undefined) role.baseRole = input.baseRole;
+          if (input.isActive !== undefined) role.isActive = input.isActive;
+        }
+        if (input.description !== undefined) role.description = input.description ?? undefined;
+        if (input.permissions !== undefined) role.permissions = input.permissions;
+        await role.save({ session });
+        await AuditService.record({ ...audit, action: "role.updated", resourceType: "Role", resourceId: roleId, before, after: roleSnapshot(role) }, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  static async remove(roleId: string, audit: AuditInput) {
+    await connectToDatabase();
+    const session = await startSession();
+    try {
+      await session.withTransaction(async () => {
+        const role = await Role.findById(roleId).session(session);
+        if (!role) throw errors.notFound("Role was not found.");
+        if (role.isSystem) throw errors.conflict("System roles cannot be deleted.");
+        if (await User.exists({ roleIds: role._id }).session(session)) {
+          throw errors.conflict("This role is assigned to users. Reassign those users before deleting it.");
+        }
+        const before = roleSnapshot(role);
+        await Role.deleteOne({ _id: role._id, isSystem: false }).session(session);
+        await AuditService.record({ ...audit, action: "role.deleted", resourceType: "Role", resourceId: roleId, before }, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+}

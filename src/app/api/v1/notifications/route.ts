@@ -1,0 +1,10 @@
+import { apiSuccess, withApiErrorHandling } from "@/lib/api";
+import { requireAuth } from "@/lib/auth/authorization";
+import { errors } from "@/lib/errors/app-error";
+import { MAX_INTERACTIVE_PAGE } from "@/config/pagination";
+import { notificationReadSchema } from "@/lib/validation/member";
+import { parseJsonBody } from "@/lib/validation/request";
+import { Notification } from "@/models";
+
+export const GET = withApiErrorHandling(async (request: Request) => { const context = await requireAuth(request); const params = new URL(request.url).searchParams; const page = Number(params.get("page") ?? 1); const limit = Number(params.get("limit") ?? 20); if (!Number.isSafeInteger(page) || !Number.isSafeInteger(limit) || page < 1 || page > MAX_INTERACTIVE_PAGE || limit < 1 || limit > 100) throw errors.badRequest("Invalid notification pagination."); const query = { userId: context.user._id, ...(params.get("unread") === "true" ? { readAt: null } : {}) }; const [items, total, unread] = await Promise.all([Notification.find(query).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit).lean(), Notification.countDocuments(query), Notification.countDocuments({ userId: context.user._id, readAt: null })]); return apiSuccess({ notifications: items.map((item) => ({ id: String(item._id), type: item.type, title: item.title, body: item.body, actionUrl: item.actionUrl, read: Boolean(item.readAt), createdAt: item.createdAt.toISOString() })), unreadCount: unread, pagination: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) } }); });
+export const PATCH = withApiErrorHandling(async (request: Request) => { const context = await requireAuth(request); const body = await parseJsonBody(request, notificationReadSchema); if ("all" in body) await Notification.updateMany({ userId: context.user._id, readAt: null }, { $set: { readAt: new Date() } }); else await Notification.updateMany({ _id: { $in: body.ids }, userId: context.user._id, readAt: null }, { $set: { readAt: new Date() } }); return apiSuccess({ ok: true }); });

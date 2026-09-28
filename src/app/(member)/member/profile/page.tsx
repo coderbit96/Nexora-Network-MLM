@@ -1,0 +1,2 @@
+import { ProfilePanel } from "@/components/member/profile-panel";
+export default function ProfilePage() { return <><div className="mb-8"><p className="text-sm font-semibold text-primary">Member profile</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Your account details</h1><p className="mt-2 text-muted-foreground">Keep your contact and payment details current.</p></div><ProfilePanel /></>; }

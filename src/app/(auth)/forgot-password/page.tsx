@@ -1,0 +1,2 @@
+import { ForgotPasswordForm } from "@/components/auth/auth-forms";
+export default function ForgotPasswordPage() { return <><p className="text-sm font-semibold text-primary">Password recovery</p><h1 className="mt-3 text-3xl font-bold tracking-tight">Reset your password.</h1><p className="mt-3 text-muted-foreground">We’ll send a reset link if an account exists for the email address.</p><ForgotPasswordForm /></>; }

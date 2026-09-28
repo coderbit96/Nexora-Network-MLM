@@ -1,0 +1,7 @@
+import { PERMISSION } from "@/config/permissions";
+import { apiSuccess, withApiErrorHandling } from "@/lib/api";
+import { requirePermission } from "@/lib/auth/authorization";
+import { MemberProfile, Order } from "@/models";
+import { parseOrderFilters, serializeOrder } from "@/services/orders/order-query";
+
+export const GET = withApiErrorHandling(async (request: Request) => { await requirePermission(PERMISSION.ORDERS.VIEW_ALL, request); const filters = parseOrderFilters(new URL(request.url).searchParams); const query = { ...(filters.status ? { status: filters.status } : {}) }; const [orders, total] = await Promise.all([Order.find(query).sort({ createdAt: -1 }).skip((filters.page - 1) * filters.limit).limit(filters.limit).lean(), Order.countDocuments(query)]); const profiles = orders.length ? await MemberProfile.find({ _id: { $in: orders.map((order) => order.memberProfileId) } }).select("memberNumber firstName lastName").lean() : []; const byId = new Map(profiles.map((profile) => [String(profile._id), profile])); return apiSuccess({ orders: orders.map((order) => ({ ...serializeOrder(order), member: (() => { const profile = byId.get(String(order.memberProfileId)); return profile ? { memberNumber: profile.memberNumber, name: `${profile.firstName} ${profile.lastName}` } : null; })() })), pagination: { total, page: filters.page, limit: filters.limit, totalPages: Math.max(1, Math.ceil(total / filters.limit)) } }); });
