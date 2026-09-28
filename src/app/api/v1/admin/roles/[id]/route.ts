@@ -14,7 +14,7 @@ export const PATCH = withApiErrorHandling(async (request: Request, { params }: {
   const id = objectIdSchema.parse((await params).id);
   const input = await parseJsonBody(request, updateRoleSchema);
   if (!Object.keys(input).length) throw errors.badRequest("Provide at least one role field to update.");
-  await RoleService.update(id, input, { actorUserId: context.user._id, actorIsSuperAdmin: context.roles.includes("SUPER_ADMIN"), ...getAuditRequestContext(request) });
+  await RoleService.update(id, input, { actorUserId: context.user._id, actor: context, ...getAuditRequestContext(request) });
   return apiSuccess({ id, updated: true });
 });
 
@@ -22,6 +22,6 @@ export const DELETE = withApiErrorHandling(async (request: Request, { params }: 
   const context = await requirePermission(PERMISSION.ROLES.DELETE, request);
   enforceRateLimit(`admin-role-delete:${context.userId}`, 10, 60_000);
   const id = objectIdSchema.parse((await params).id);
-  await RoleService.remove(id, { actorUserId: context.user._id, ...getAuditRequestContext(request) });
+  await RoleService.remove(id, { actorUserId: context.user._id, actor: context, ...getAuditRequestContext(request) });
   return apiSuccess({ id, deleted: true });
 });

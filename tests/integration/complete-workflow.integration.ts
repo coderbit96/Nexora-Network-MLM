@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import { Types, startSession } from "mongoose";
+import test, { after } from "node:test";
+import { Types, startSession, disconnect } from "mongoose";
 
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { Cart, Category, CommissionRule, CommissionTransaction, MemberPaymentDetails, MemberProfile, Order, Payment, Product, Role, SponsorRelationship, User, Wallet, WalletTransaction, Withdrawal } from "@/models";
@@ -13,6 +13,7 @@ const testUri = process.env.MLM_TEST_MONGODB_URI;
 const testDatabase = process.env.MLM_TEST_MONGODB_DB_NAME;
 const integrationEnabled = Boolean(testUri && testDatabase);
 const requiredTestDatabaseName = /(?:^|[-_])test$/i;
+after(async () => { await disconnect(); });
 
 type CreatedMember = { userId: Types.ObjectId; profileId: Types.ObjectId; referralCode: string };
 

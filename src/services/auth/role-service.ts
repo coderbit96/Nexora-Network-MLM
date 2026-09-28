@@ -8,8 +8,11 @@ import type { AuditRequestContext } from "@/services/audit/audit-service";
 import { AuditService } from "@/services/audit/audit-service";
 import { Role, User } from "@/models";
 import type { CreateRoleInput, UpdateRoleInput } from "@/lib/validation/roles";
+import { hasPermission, type AuthorizationSnapshot } from "@/lib/auth/policy";
+import { PERMISSION } from "@/config/permissions";
+import { canCreateRoleDefinition, canManageRoleDefinition } from "./role-authorization";
 
-type AuditInput = AuditRequestContext & { actorUserId: Types.ObjectId; actorIsSuperAdmin?: boolean };
+type AuditInput = AuditRequestContext & { actorUserId: Types.ObjectId; actor: AuthorizationSnapshot };
 
 function roleSnapshot(role: { name: string; slug: string; description?: string; baseRole: string; permissions: readonly string[]; isSystem: boolean; isActive: boolean }) {
   return { name: role.name, slug: role.slug, description: role.description ?? null, baseRole: role.baseRole, permissions: [...role.permissions], isSystem: role.isSystem, isActive: role.isActive };
@@ -17,6 +20,7 @@ function roleSnapshot(role: { name: string; slug: string; description?: string; 
 
 export class RoleService {
   static async create(input: CreateRoleInput, audit: AuditInput) {
+    if (!canCreateRoleDefinition(audit.actor, input)) throw errors.forbidden();
     await connectToDatabase();
     const session = await startSession();
     try {
@@ -44,12 +48,17 @@ export class RoleService {
   }
 
   static async update(roleId: string, input: UpdateRoleInput, audit: AuditInput) {
+    if (!hasPermission(audit.actor, PERMISSION.ROLES.EDIT)) throw errors.forbidden();
     await connectToDatabase();
     const session = await startSession();
     try {
       await session.withTransaction(async () => {
         const role = await Role.findById(roleId).session(session);
         if (!role) throw errors.notFound("Role was not found.");
+        if (!canManageRoleDefinition(audit.actor, role)
+          || !canManageRoleDefinition(audit.actor, { baseRole: input.baseRole ?? role.baseRole, permissions: input.permissions ?? role.permissions, isSystem: role.isSystem })) {
+          throw errors.forbidden("You cannot manage this role or grant these permissions.");
+        }
         const before = roleSnapshot(role);
 
         if (role.isSystem) {
@@ -60,7 +69,7 @@ export class RoleService {
             if (role.baseRole === "SUPER_ADMIN") {
               throw errors.conflict("The SUPER_ADMIN system role must remain active.");
             }
-            if (!audit.actorIsSuperAdmin) {
+            if (!audit.actor.roles.includes("SUPER_ADMIN")) {
               throw errors.forbidden("Only a Super Admin can change a built-in role's status.");
             }
             role.isActive = input.isActive;
@@ -91,12 +100,14 @@ export class RoleService {
   }
 
   static async remove(roleId: string, audit: AuditInput) {
+    if (!hasPermission(audit.actor, PERMISSION.ROLES.DELETE)) throw errors.forbidden();
     await connectToDatabase();
     const session = await startSession();
     try {
       await session.withTransaction(async () => {
         const role = await Role.findById(roleId).session(session);
         if (!role) throw errors.notFound("Role was not found.");
+        if (!canManageRoleDefinition(audit.actor, role)) throw errors.forbidden();
         if (role.isSystem) throw errors.conflict("System roles cannot be deleted.");
         if (await User.exists({ roleIds: role._id }).session(session)) {
           throw errors.conflict("This role is assigned to users. Reassign those users before deleting it.");

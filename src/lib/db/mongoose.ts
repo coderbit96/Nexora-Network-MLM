@@ -18,6 +18,9 @@ export async function connectToDatabase() {
   const { MONGODB_URI, MONGODB_DB_NAME, MONGODB_MAX_POOL_SIZE, MONGODB_MIN_POOL_SIZE } = getDatabaseEnv();
   cached.promise ??= mongoose.connect(MONGODB_URI, {
     dbName: MONGODB_DB_NAME,
+    // Preserve BSON int64 money as bigint, including lean queries and aggregates.
+    // Otherwise the driver returns numbers and checkout/ledger arithmetic fails.
+    useBigInt64: true,
     autoIndex: process.env.NODE_ENV !== "production",
     maxPoolSize: MONGODB_MAX_POOL_SIZE,
     minPoolSize: MONGODB_MIN_POOL_SIZE,

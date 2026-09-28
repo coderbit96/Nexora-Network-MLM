@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, ErrorState } from "@/components/shared/states";
+import { PasswordInput } from "@/components/auth/password-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,9 +21,9 @@ type Staff = { id: string; name: string; email: string; status: Status; roles: R
 type Capabilities = { canCreate: boolean; canEdit: boolean; canDisable: boolean; canAssignRoles: boolean };
 type Data = { items: Staff[]; pagination: { total: number; page: number; limit: number; totalPages: number }; capabilities: Capabilities; assignableRoles: Role[] };
 type Api<T> = { success: true; data: T } | { success: false; error?: { message?: string } };
-type Draft = { name: string; email: string; roleId: string; status: Status };
+type Draft = { name: string; email: string; password: string; confirmPassword: string; roleId: string; status: Status };
 
-const emptyDraft: Draft = { name: "", email: "", roleId: "", status: "PENDING" };
+const emptyDraft: Draft = { name: "", email: "", password: "", confirmPassword: "", roleId: "", status: "ACTIVE" };
 const statuses: Status[] = ["PENDING", "ACTIVE", "SUSPENDED", "DISABLED"];
 
 function responseMessage(response: Api<unknown>) {
@@ -76,7 +77,7 @@ export function StaffManager() {
 
   function openEdit(staff: Staff) {
     setEditing(staff);
-    setDraft({ name: staff.name, email: staff.email, roleId: staff.roles[0]?.id ?? "", status: staff.status });
+    setDraft({ name: staff.name, email: staff.email, password: "", confirmPassword: "", roleId: staff.roles[0]?.id ?? "", status: staff.status });
     setDisableConfirmed(false);
     setDialogOpen(true);
   }
@@ -91,6 +92,10 @@ export function StaffManager() {
 
   async function save() {
     if (!data) return;
+    if (!editing && draft.password !== draft.confirmPassword) {
+      toast.error("The passwords do not match.");
+      return;
+    }
     if (draft.status === "DISABLED" && !disableConfirmed) {
       toast.error("Confirm the account disablement before continuing.");
       return;
@@ -101,7 +106,7 @@ export function StaffManager() {
           ...(data.capabilities.canEdit && data.capabilities.canAssignRoles && draft.roleId !== editing.roles[0]?.id ? { roleId: draft.roleId } : {}),
           ...(draft.status !== editing.status ? { status: draft.status } : {}),
         }
-      : { name: draft.name, email: draft.email, roleId: draft.roleId, status: draft.status };
+      : { name: draft.name, email: draft.email, password: draft.password, roleId: draft.roleId, status: draft.status };
     if (editing && !Object.keys(payload).length) {
       setDialogOpen(false);
       return;
@@ -115,7 +120,7 @@ export function StaffManager() {
       });
       const result = await response.json() as Api<unknown>;
       if (!response.ok || !result.success) throw new Error(responseMessage(result));
-      toast.success(editing ? "Staff account updated." : "Staff account created. The user can set a password through Forgot password.");
+      toast.success(editing ? "Staff account updated." : "Staff account created. The user can now sign in with the assigned password.");
       setDialogOpen(false);
       await load();
     } catch (error) {
@@ -133,8 +138,8 @@ export function StaffManager() {
   return <>
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><CardTitle>Staff accounts</CardTitle><CardDescription>Assign only bounded, database-backed roles. Staff set their own password through the standard reset flow.</CardDescription></div>
-        {data.capabilities.canCreate && data.assignableRoles.length ? <Button onClick={openCreate}><UserRoundPlus className="size-4" />Add staff</Button> : null}
+        <div><CardTitle>Admin & staff accounts</CardTitle><CardDescription>Assign only active, database-backed Admin or Staff roles with a secure sign-in credential.</CardDescription></div>
+        {data.capabilities.canCreate && data.assignableRoles.length ? <Button onClick={openCreate}><UserRoundPlus className="size-4" />Add team account</Button> : null}
       </CardHeader>
       <CardContent>
         <form className="mb-5 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuerySearch(search.trim()); }}>
@@ -144,17 +149,18 @@ export function StaffManager() {
         </form>
         {data.items.length ? <><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead>Account</TableHead><TableHead>Created</TableHead>{mayMutate ? <TableHead className="text-right">Actions</TableHead> : null}</TableRow></TableHeader><TableBody>
           {data.items.map((staff) => <TableRow key={staff.id}><TableCell><p className="font-medium">{staff.name}</p><p className="text-xs text-muted-foreground">{staff.email}</p></TableCell><TableCell>{staff.roles.map((role) => <Badge key={role.id} variant={role.baseRole === "SUPER_ADMIN" ? "warning" : "secondary"} className="mr-1">{role.name}</Badge>)}</TableCell><TableCell><StatusBadge status={staff.status} /></TableCell><TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatDateTime(staff.createdAt)}</TableCell>{mayMutate ? <TableCell className="text-right">{staff.canManage ? <Button size="sm" variant="outline" onClick={() => openEdit(staff)}><Pencil className="size-4" />Edit</Button> : <span className="text-xs text-muted-foreground">Protected</span>}</TableCell> : null}</TableRow>)}
-        </TableBody></Table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"><span>{data.pagination.total} staff accounts</span><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="size-4" />Previous</Button><span>Page {data.pagination.page} of {data.pagination.totalPages}</span><Button size="sm" variant="outline" disabled={page >= data.pagination.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="size-4" /></Button></div></div></> : <EmptyState title="No staff accounts found" description="Create a staff account when you need to delegate a limited operational role." />}
+        </TableBody></Table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"><span>{data.pagination.total} team accounts</span><div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="size-4" />Previous</Button><span>Page {data.pagination.page} of {data.pagination.totalPages}</span><Button size="sm" variant="outline" disabled={page >= data.pagination.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="size-4" /></Button></div></div></> : <EmptyState title="No team accounts found" description="Create an Admin or Staff account when you need to delegate an operational role." />}
       </CardContent>
     </Card>
 
-    <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}><DialogContent><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : "Add staff account"}</DialogTitle><DialogDescription>{editing ? "Role and account-state changes are audited. You cannot edit your own staff account here." : "A Firebase identity is created without an administrator-controlled password. The person can use Forgot password to establish their sign-in password."}</DialogDescription></DialogHeader>
+    <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}><DialogContent><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : "Add team account"}</DialogTitle><DialogDescription>{editing ? "Role and account-state changes are audited. You cannot edit your own team account here." : "Create an Admin or Staff Firebase sign-in with the secure password you set. The password is never stored in the application database or audit log."}</DialogDescription></DialogHeader>
       <div className="grid gap-4"><div><label className="text-sm font-medium" htmlFor="staff-name">Name</label><Input id="staff-name" className="mt-2" value={draft.name} disabled={Boolean(editing && !data.capabilities.canEdit)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></div>
       {!editing ? <div><label className="text-sm font-medium" htmlFor="staff-email">Email</label><Input id="staff-email" className="mt-2" type="email" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></div> : <div><p className="text-sm font-medium">Email</p><p className="mt-2 text-sm text-muted-foreground">{draft.email}</p></div>}
+      {!editing ? <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="staff-password">Temporary password</label><div className="mt-2"><PasswordInput id="staff-password" autoComplete="new-password" value={draft.password} onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))} /></div><p className="mt-1 text-xs text-muted-foreground">At least 12 characters with uppercase, lowercase, and a number.</p></div><div><label className="text-sm font-medium" htmlFor="staff-confirm-password">Confirm password</label><div className="mt-2"><PasswordInput id="staff-confirm-password" autoComplete="new-password" value={draft.confirmPassword} onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></div></div></div> : null}
       <div><label className="text-sm font-medium" htmlFor="staff-role">Role</label>{data.capabilities.canAssignRoles && (!editing || data.capabilities.canEdit) ? <select id="staff-role" value={draft.roleId} onChange={(event) => setDraft((current) => ({ ...current, roleId: event.target.value }))} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">{data.assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name} · {role.baseRole}</option>)}</select> : <p className="mt-2 text-sm text-muted-foreground">{editing?.roles.map((role) => role.name).join(", ") ?? "No assignable role"}</p>}</div>
       <div><label className="text-sm font-medium" htmlFor="staff-status">Account status</label><select id="staff-status" value={draft.status} disabled={Boolean(editing && !data.capabilities.canEdit && !data.capabilities.canDisable)} onChange={(event) => { setDraft((current) => ({ ...current, status: event.target.value as Status })); setDisableConfirmed(false); }} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">{statusOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
       {draft.status === "DISABLED" ? <label className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"><input className="mt-1" type="checkbox" checked={disableConfirmed} onChange={(event) => setDisableConfirmed(event.target.checked)} /><span><ShieldAlert className="mr-1 inline size-4 text-destructive" />I understand this blocks application access and disables Firebase sign-in for this account.</span></label> : null}</div>
-      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDialogOpen(false)}>Cancel</Button><Button disabled={saving || (!editing && (!draft.name.trim() || !draft.email.trim() || !draft.roleId))} onClick={() => void save()}>{saving ? "Saving…" : <><Check className="size-4" />Save staff</>}</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDialogOpen(false)}>Cancel</Button><Button disabled={saving || (!editing && (!draft.name.trim() || !draft.email.trim() || !draft.password || !draft.confirmPassword || !draft.roleId))} onClick={() => void save()}>{saving ? "Saving…" : <><Check className="size-4" />Save account</>}</Button></DialogFooter>
     </DialogContent></Dialog>
   </>;
 }

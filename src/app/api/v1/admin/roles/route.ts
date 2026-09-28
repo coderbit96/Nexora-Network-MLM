@@ -11,6 +11,6 @@ export const POST = withApiErrorHandling(async (request: Request) => {
   const context = await requirePermission(PERMISSION.ROLES.CREATE, request);
   enforceRateLimit(`admin-role-create:${context.userId}`, 20, 60_000);
   const input = await parseJsonBody(request, createRoleSchema);
-  const role = await RoleService.create(input, { actorUserId: context.user._id, ...getAuditRequestContext(request) });
+  const role = await RoleService.create(input, { actorUserId: context.user._id, actor: context, ...getAuditRequestContext(request) });
   return apiSuccess(role, { status: 201 });
 });

@@ -64,3 +64,9 @@ export const adminNavigation: NavigationItem[] = [
   { label: "Notifications", href: "/admin/notifications", icon: Bell, permission: PERMISSION.NOTIFICATIONS.VIEW },
   { label: "Audit logs", href: "/admin/audit-logs", icon: ChartNoAxesCombined, permission: PERMISSION.AUDIT.VIEW },
 ];
+
+/** Staff starts in its own workspace, then sees only operations granted by its role. */
+export const staffNavigation: NavigationItem[] = [
+  { label: "Dashboard", href: "/staff", icon: LayoutDashboard },
+  ...adminNavigation.filter((item) => item.label !== "Dashboard"),
+];

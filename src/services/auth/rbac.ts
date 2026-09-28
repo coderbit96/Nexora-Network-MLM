@@ -25,16 +25,8 @@ export async function ensureSystemRbac(session?: ClientSession) {
       { upsert: true, session },
     );
 
-    // Apply newly introduced defaults to existing system roles without
-    // deleting a previously configured grant or touching custom roles.
-    const defaults = SYSTEM_ROLE_PERMISSIONS[roleName];
-    if (defaults.length > 0) {
-      await Role.updateOne(
-        { name: roleName, isSystem: true },
-        { $addToSet: { permissions: { $each: defaults } } },
-        { session },
-      );
-    }
+    // Defaults apply only on first creation. Registration must never restore
+    // permissions deliberately revoked by an administrator.
   }
 }
 

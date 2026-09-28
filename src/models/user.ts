@@ -12,6 +12,26 @@ async function assertRolesAreAssignable(roleIds: Types.ObjectId[], session?: Cli
   if (await query !== uniqueRoleIds.length) throw new Error("Roles must exist and be active before they can be assigned.");
 }
 
+/** The seeded owner role may belong to one application user only. */
+async function assertSingleSuperAdminAssignment(
+  roleIds: Types.ObjectId[],
+  userModel: Model<IUser>,
+  currentUserId?: unknown,
+  session?: ClientSession | null,
+) {
+  const roleQuery = Role.find({ _id: { $in: roleIds }, baseRole: "SUPER_ADMIN" }).select("_id").lean();
+  if (session) roleQuery.session(session);
+  const superAdminRoles = await roleQuery;
+  if (!superAdminRoles.length) return;
+
+  const assignmentQuery = userModel.countDocuments({
+    ...(currentUserId ? { _id: { $ne: currentUserId } } : {}),
+    roleIds: { $in: superAdminRoles.map((role) => role._id) },
+  });
+  if (session) assignmentQuery.session(session);
+  if (await assignmentQuery) throw new Error("The single SUPER_ADMIN role is already assigned to the owner account.");
+}
+
 const UserSchema = new Schema<IUser>({
   firebaseUid: { type: String, required: true, trim: true, immutable: true },
   email: { type: String, required: true, trim: true, lowercase: true, immutable: true, match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
@@ -32,7 +52,10 @@ UserSchema.index({ status: 1, createdAt: -1 });
 UserSchema.index({ roleIds: 1, createdAt: -1 });
 
 UserSchema.pre("validate", async function () {
-  if (this.isModified("roleIds")) await assertRolesAreAssignable(this.roleIds, this.$session());
+  if (this.isModified("roleIds")) {
+    await assertRolesAreAssignable(this.roleIds, this.$session());
+    await assertSingleSuperAdminAssignment(this.roleIds, this.constructor as Model<IUser>, this.isNew ? undefined : this._id, this.$session());
+  }
 });
 
 UserSchema.pre(["updateOne", "findOneAndUpdate", "replaceOne"], async function () {
@@ -41,13 +64,17 @@ UserSchema.pre(["updateOne", "findOneAndUpdate", "replaceOne"], async function (
     ?? update?.roleIds
     ?? (update?.$addToSet as Record<string, unknown> | undefined)?.roleIds
     ?? (update?.$push as Record<string, unknown> | undefined)?.roleIds;
-  if (Array.isArray(roleIds)) await assertRolesAreAssignable(roleIds as Types.ObjectId[], this.getOptions().session);
+  if (Array.isArray(roleIds)) {
+    await assertRolesAreAssignable(roleIds as Types.ObjectId[], this.getOptions().session);
+    await assertSingleSuperAdminAssignment(roleIds as Types.ObjectId[], this.model, this.getFilter()._id, this.getOptions().session);
+  }
   if (roleIds && !Array.isArray(roleIds)) {
     const values = typeof roleIds === "object" && "$each" in roleIds
       ? (roleIds as { $each?: unknown }).$each
       : [roleIds];
     if (!Array.isArray(values)) throw new Error("Role assignment must use valid role identifiers.");
     await assertRolesAreAssignable(values as Types.ObjectId[], this.getOptions().session);
+    await assertSingleSuperAdminAssignment(values as Types.ObjectId[], this.model, this.getFilter()._id, this.getOptions().session);
   }
 });
 

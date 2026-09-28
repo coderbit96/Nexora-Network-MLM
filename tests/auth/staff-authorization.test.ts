@@ -26,6 +26,9 @@ const adminActor = {
 test("staff payloads reject raw role injection and unrestricted fields", () => {
   assert.equal(createStaffSchema.safeParse({ name: "Unsafe Request", email: "unsafe@example.test", role: "SUPER_ADMIN" }).success, false);
   assert.equal(createStaffSchema.safeParse({ name: "Unsafe Request", email: "unsafe@example.test", roleId: id().toString(), permissions: [PERMISSION.SYSTEM.MANAGE] }).success, false);
+  assert.equal(createStaffSchema.safeParse({ name: "No password", email: "staff@example.test", roleId: id().toString(), status: "ACTIVE" }).success, false);
+  assert.equal(createStaffSchema.safeParse({ name: "Weak password", email: "staff@example.test", password: "weakpassword", roleId: id().toString(), status: "ACTIVE" }).success, false);
+  assert.equal(createStaffSchema.safeParse({ name: "Secure account", email: "staff@example.test", password: "SecurePassword123", roleId: id().toString(), status: "ACTIVE" }).success, true);
   assert.equal(updateStaffSchema.safeParse({ role: "SUPER_ADMIN" }).success, false);
 });
 
@@ -42,11 +45,11 @@ test("only an explicit super admin can create or manage privileged staff account
   const superRole = staffRole({ baseRole: "SUPER_ADMIN", name: "SUPER_ADMIN", slug: "super-admin", permissions: [] });
   const adminRole = staffRole({ baseRole: "ADMIN", name: "ADMIN", slug: "admin", permissions: [PERMISSION.STAFF.VIEW] });
 
-  assert.equal(canAssignStaffRole(superAdmin, superRole), true);
+  assert.equal(canAssignStaffRole(superAdmin, superRole), false);
   assert.equal(canAssignStaffRole(superAdmin, adminRole), true);
   assert.equal(canManageStaffTarget(adminActor, "actor", "super", [{ baseRole: "SUPER_ADMIN" }]), false);
   assert.equal(canManageStaffTarget(adminActor, "actor", "admin", [{ baseRole: "ADMIN" }]), false);
-  assert.equal(canManageStaffTarget(superAdmin, "actor", "super", [{ baseRole: "SUPER_ADMIN" }]), true);
+  assert.equal(canManageStaffTarget(superAdmin, "actor", "super", [{ baseRole: "SUPER_ADMIN" }]), false);
   assert.equal(canManageStaffTarget(superAdmin, "actor", "actor", [{ baseRole: "SUPER_ADMIN" }]), false);
 });
 

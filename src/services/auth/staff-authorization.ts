@@ -15,7 +15,10 @@ function isExplicitSuperAdmin(actor: AuthorizationSnapshot) {
 
 export function canAssignStaffRole(actor: AuthorizationSnapshot, role: AssignableStaffRole) {
   if (!role.isActive || !hasPermission(actor, PERMISSION.ROLES.ASSIGN)) return false;
-  if (isExplicitSuperAdmin(actor)) return ["SUPER_ADMIN", "ADMIN", "STAFF"].includes(role.baseRole);
+  // The owner account is seeded once and is never delegated through ordinary
+  // staff management. This prevents a second Super Admin from being created.
+  if (role.baseRole === "SUPER_ADMIN") return false;
+  if (isExplicitSuperAdmin(actor)) return ["ADMIN", "STAFF"].includes(role.baseRole);
 
   // Non-super administrators can delegate only a bounded STAFF role and only
   // when every grant in that role is already held by the acting administrator.
@@ -39,7 +42,7 @@ export function canDisableStaff(actor: AuthorizationSnapshot) {
   return hasPermission(actor, PERMISSION.STAFF.DISABLE);
 }
 
-/** Only a Super Admin may manage an ADMIN or SUPER_ADMIN account. */
+/** Only a Super Admin may manage an ADMIN account. The owner account is not staff-managed. */
 export function canManageStaffTarget(
   actor: AuthorizationSnapshot,
   actorUserId: string,
@@ -47,7 +50,8 @@ export function canManageStaffTarget(
   targetRoles: readonly Pick<IRole, "baseRole">[],
 ) {
   if (actorUserId === targetUserId) return false;
-  const targetIsPrivileged = targetRoles.some((role) => role.baseRole === "SUPER_ADMIN" || role.baseRole === "ADMIN");
+  if (targetRoles.some((role) => role.baseRole === "SUPER_ADMIN")) return false;
+  const targetIsPrivileged = targetRoles.some((role) => role.baseRole === "ADMIN");
   return !targetIsPrivileged || isExplicitSuperAdmin(actor);
 }
 

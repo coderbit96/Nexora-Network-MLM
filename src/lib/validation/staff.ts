@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { strongPasswordSchema } from "@/lib/validation/password";
+
 const displayNameSchema = z.string().trim().min(2, "Enter a staff name.").max(120);
 const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address.").max(254);
 const roleIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Select a valid role.");
@@ -9,6 +11,7 @@ const statusSchema = z.enum(["PENDING", "ACTIVE", "SUSPENDED", "DISABLED"]);
 export const createStaffSchema = z.object({
   name: displayNameSchema,
   email: emailSchema,
+  password: strongPasswordSchema,
   roleId: roleIdSchema,
   status: statusSchema.default("PENDING"),
 }).strict();

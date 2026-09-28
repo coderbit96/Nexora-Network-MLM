@@ -59,7 +59,7 @@ export class StaffService {
   static async listAssignableRoles(actor: AuthContext) {
     if (!canCreateStaff(actor) && !(canEditStaff(actor) && canAssignStaffRoles(actor))) return [];
     await connectToDatabase();
-    const roles = await Role.find({ isActive: true, baseRole: { $in: ["SUPER_ADMIN", "ADMIN", "STAFF"] } })
+    const roles = await Role.find({ isActive: true, baseRole: { $in: ["ADMIN", "STAFF"] } })
       .select("name slug baseRole permissions isActive")
       .sort({ name: 1 })
       .lean();
@@ -77,6 +77,7 @@ export class StaffService {
     try {
       const firebaseUser = await getFirebaseAdminAuth().createUser({
         email: input.email,
+        password: input.password,
         displayName: input.name,
         disabled: input.status === "DISABLED",
       });

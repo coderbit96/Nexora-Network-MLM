@@ -30,7 +30,7 @@ export const GET = withApiErrorHandling(async (request: Request) => {
   const context = await requirePermission(PERMISSION.STAFF.VIEW, request);
   const input = parseListFilters(new URL(request.url));
   const skip = (input.page - 1) * input.limit;
-  const staffRoleIds = (await Role.find({ baseRole: { $in: ["SUPER_ADMIN", "ADMIN", "STAFF"] } }).select("_id").lean()).map((role) => role._id);
+  const staffRoleIds = (await Role.find({ baseRole: { $in: ["ADMIN", "STAFF"] } }).select("_id").lean()).map((role) => role._id);
   const query = {
     roleIds: { $in: staffRoleIds },
     ...(input.status ? { status: input.status } : {}),
