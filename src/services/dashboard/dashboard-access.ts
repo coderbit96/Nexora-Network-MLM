@@ -19,20 +19,30 @@ export function scopeDashboard(data: AdminDashboardData, actor: AuthorizationSna
   const access = dashboardAccess(actor);
   const metrics: Partial<AdminDashboardData["metrics"]> = { ...data.metrics };
   if (!access.finance) {
-    delete metrics.commissionPaidMinor;
-    delete metrics.pendingCommissions;
-    delete metrics.pendingCommissionMinor;
+    delete metrics.totalCommissionMinor;
+    delete metrics.commissionInRangeMinor;
     delete metrics.walletLiabilityMinor;
+    delete metrics.pendingWithdrawalCount;
     delete metrics.pendingWithdrawalsMinor;
+    delete metrics.completedWithdrawalCount;
     delete metrics.completedWithdrawalsMinor;
+    delete metrics.completedWithdrawalsInRangeMinor;
   }
-  if (!access.sales) { delete metrics.totalSalesMinor; delete metrics.orders; }
+  if (!access.sales) {
+    delete metrics.totalSalesMinor;
+    delete metrics.salesInRangeMinor;
+    delete metrics.totalOrders;
+    delete metrics.ordersInRange;
+    delete metrics.successfulPayments;
+    delete metrics.successfulPaymentsInRange;
+  }
   return {
     ...data, access, metrics,
     charts: { ...data.charts, salesTrend: access.sales ? data.charts.salesTrend : [], commissionTrend: access.finance ? data.charts.commissionTrend : [], withdrawalTrend: access.finance ? data.charts.withdrawalTrend : [] },
     recentMembers: access.members ? data.recentMembers : [],
     pendingWithdrawals: access.withdrawals ? data.pendingWithdrawals : [],
     recentOrders: access.orders ? data.recentOrders : [],
+    recentPayments: access.sales ? data.recentPayments : [],
     recentCommissions: access.commissions ? data.recentCommissions : [],
     securityActivity: access.audit ? data.securityActivity : [],
   };

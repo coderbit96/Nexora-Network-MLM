@@ -6,9 +6,9 @@ import type { AdminDashboardData } from "@/services/dashboard/admin-dashboard";
 
 const data: AdminDashboardData = {
   range: { key: "today", label: "Today", from: "2026-09-29", to: "2026-09-30" }, currency: "INR",
-  metrics: { totalMembers: 2, activeMembers: 2, newMembers: 1, totalSalesMinor: "12345", commissionPaidMinor: "100", pendingCommissions: 1, pendingCommissionMinor: "50", walletLiabilityMinor: "1000", pendingWithdrawalsMinor: "300", completedWithdrawalsMinor: "200", orders: 1 },
+  metrics: { totalMembers: 2, activeMembers: 2, newMembers: 1, previousNewMembers: 0, totalSalesMinor: "12345", salesInRangeMinor: "100", totalCommissionMinor: "100", commissionInRangeMinor: "50", walletLiabilityMinor: "1000", pendingWithdrawalCount: 1, pendingWithdrawalsMinor: "300", completedWithdrawalCount: 1, completedWithdrawalsMinor: "200", completedWithdrawalsInRangeMinor: "100", totalOrders: 1, ordersInRange: 1, successfulPayments: 1, successfulPaymentsInRange: 1 },
   charts: { memberGrowth: [{ label: "Today", count: 1 }], salesTrend: [{ label: "Today", amountMinor: "12345" }], commissionTrend: [{ label: "Today", amountMinor: "100" }], withdrawalTrend: [{ label: "Today", amountMinor: "200" }] },
-  recentMembers: [{ id: "member", memberNumber: "MLM000001", name: "Private Member", status: "ACTIVE", joinedAt: "2026-09-29" }], pendingWithdrawals: [], recentOrders: [], recentCommissions: [],
+  recentMembers: [{ id: "member", memberNumber: "MLM000001", name: "Private Member", status: "ACTIVE", joinedAt: "2026-09-29" }], pendingWithdrawals: [], recentOrders: [], recentPayments: [{ id: "payment", orderNumber: "ORD000001", memberName: "Private Member", memberNumber: "MLM000001", amountMinor: "100", currency: "INR", provider: "mock", status: "SUCCESS", createdAt: "2026-09-29" }], recentCommissions: [],
   securityActivity: [{ id: "audit", action: "role.updated", resourceType: "Role", actorName: "Owner", createdAt: "2026-09-29" }],
 };
 

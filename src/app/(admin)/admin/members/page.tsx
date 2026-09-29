@@ -1,2 +1,6 @@
-import { ManagementTable } from "@/components/admin/management-table";
-export default function MembersPage() { return <><div className="mb-8"><p className="text-sm font-semibold text-primary">Member management</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Members</h1><p className="mt-2 text-muted-foreground">Search member identities and open the complete account record.</p></div><ManagementTable resource="members" title="Members" description="Member profile and account status are enforced server-side." statuses={["ACTIVE", "PENDING", "INACTIVE", "SUSPENDED"]} searchPlaceholder="Search name or MLM member number" columns={[{ key: "memberNumber", label: "Member", href: "member-detail" }, { key: "name", label: "Name" }, { key: "email", label: "Email" }, { key: "status", label: "Member status", type: "badge" }, { key: "accountStatus", label: "Account", type: "badge" }, { key: "joinedAt", label: "Joined", type: "date" }]} /></>; }
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { MemberManager } from "@/components/admin/member-manager";
+
+export default function MembersPage() {
+  return <><AdminPageHeader eyebrow="Member management" title="Members" description="Review account status, sponsors, team growth, and operational history." /><MemberManager /></>;
+}

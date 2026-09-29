@@ -1,3 +1,4 @@
 import { AdminWithdrawalPanel } from "@/components/withdrawal/withdrawal-dashboard";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 
-export default function AdminWithdrawalsPage() { return <><div className="mb-8"><p className="text-sm font-semibold text-primary">Financial operations</p><h1 className="mt-2 text-3xl font-bold tracking-tight">Withdrawal management</h1><p className="mt-2 text-muted-foreground">Process manually paid withdrawals through an auditable, controlled state machine.</p></div><AdminWithdrawalPanel /></>; }
+export default function AdminWithdrawalsPage() { return <><AdminPageHeader eyebrow="Financial operations" title="Withdrawal management" description="Process manually paid withdrawals through an auditable, controlled state machine." /><AdminWithdrawalPanel /></>; }

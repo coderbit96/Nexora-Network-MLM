@@ -45,7 +45,7 @@ export const memberNavigation: NavigationItem[] = [
 ];
 
 export const adminNavigation: NavigationItem[] = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Members", href: "/admin/members", icon: Users, permission: PERMISSION.MEMBERS.VIEW },
   { label: "Genealogy", href: "/admin/genealogy", icon: GitBranch, permission: PERMISSION.GENEALOGY.VIEW_ALL },
   { label: "Commissions", href: "/admin/commissions", icon: CircleDollarSign, permission: PERMISSION.COMMISSIONS.VIEW_ALL },
