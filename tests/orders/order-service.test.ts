@@ -26,6 +26,25 @@ test("checkout snapshots catalogue commission eligibility", () => {
   assert.equal(snapshot.items[0].bv, 0n);
 });
 
+test("captured order lines remain unchanged when the catalogue product later changes", () => {
+  const original = buildAuthoritativeOrderSnapshot([{ productId, quantity: 1 }], [product()], new Set([String(categoryId)]));
+  const changedCatalogue = buildAuthoritativeOrderSnapshot([{ productId, quantity: 1 }], [product({ name: "Repriced Product", sku: "AUTH-002", priceMinor: 99_999n, salePriceMinor: undefined, pv: 99n, bv: 199n })], new Set([String(categoryId)]));
+
+  assert.deepEqual(original.items[0], {
+    productId,
+    sku: "AUTH-001",
+    name: "Authoritative Product",
+    quantity: 1,
+    unitPriceMinor: 10_005n,
+    lineTotalMinor: 10_005n,
+    pv: 20n,
+    bv: 30n,
+    commissionEligible: true,
+  });
+  assert.equal(changedCatalogue.items[0].unitPriceMinor, 99_999n);
+  assert.equal(changedCatalogue.items[0].name, "Repriced Product");
+});
+
 test("checkout rejects invalid, inactive, and insufficient-stock products", () => {
   assert.throws(() => buildAuthoritativeOrderSnapshot([{ productId: new Types.ObjectId(), quantity: 1 }], [product()], new Set([String(categoryId)])), /unavailable/);
   assert.throws(() => buildAuthoritativeOrderSnapshot([{ productId, quantity: 1 }], [product({ status: "INACTIVE" })], new Set([String(categoryId)])), /unavailable/);

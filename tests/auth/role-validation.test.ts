@@ -13,6 +13,10 @@ test("custom roles accept only supported base roles and catalog permissions", ()
     permissions: [PERMISSION.WALLET.VIEW_ALL, PERMISSION.WITHDRAWALS.VIEW_ALL],
   });
   assert.deepEqual(role.permissions, [PERMISSION.WALLET.VIEW_ALL, PERMISSION.WITHDRAWALS.VIEW_ALL]);
+  assert.equal(role.isActive, true);
+
+  const inactiveRole = createRoleSchema.parse({ name: "Queued Support", slug: "queued-support", baseRole: "STAFF", permissions: [], isActive: false });
+  assert.equal(inactiveRole.isActive, false);
 
   assert.throws(() => createRoleSchema.parse({ name: "ADMIN", slug: "another-admin", baseRole: "ADMIN", permissions: [] }), /reserved/i);
   assert.throws(() => createRoleSchema.parse({ name: "Unsafe", slug: "unsafe", baseRole: "SUPER_ADMIN", permissions: [] }), /Invalid enum value/i);

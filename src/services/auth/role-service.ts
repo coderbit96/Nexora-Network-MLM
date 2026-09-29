@@ -35,7 +35,7 @@ export class RoleService {
           baseRole: input.baseRole,
           permissions: input.permissions,
           isSystem: false,
-          isActive: true,
+          isActive: input.isActive,
         }], { session });
         createdId = String(role._id);
         await AuditService.record({ ...audit, action: "role.created", resourceType: "Role", resourceId: createdId, after: roleSnapshot(role) }, session);

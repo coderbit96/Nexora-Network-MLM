@@ -21,7 +21,8 @@ const WalletTransactionSchema = new Schema<IWalletTransaction>({
 WalletTransactionSchema.index({ idempotencyKey: 1 }, { unique: true });
 WalletTransactionSchema.index({ memberProfileId: 1, createdAt: -1 });
 WalletTransactionSchema.index({ type: 1, createdAt: -1 });
+WalletTransactionSchema.index({ direction: 1, createdAt: -1 });
 WalletTransactionSchema.index({ createdAt: -1 });
-WalletTransactionSchema.index({ referenceType: 1, referenceId: 1 });
+WalletTransactionSchema.index({ referenceType: 1, referenceId: 1, createdAt: -1 });
 makeImmutable(WalletTransactionSchema);
 export const WalletTransaction: Model<IWalletTransaction> = (models.WalletTransaction as Model<IWalletTransaction>) || model<IWalletTransaction>("WalletTransaction", WalletTransactionSchema);

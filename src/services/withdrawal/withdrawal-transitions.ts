@@ -2,8 +2,8 @@ import type { WithdrawalStatus } from "@/types/domain";
 
 export const WITHDRAWAL_TRANSITIONS: Readonly<Record<WithdrawalStatus, readonly WithdrawalStatus[]>> = {
   PENDING: ["APPROVED", "REJECTED", "CANCELLED"],
-  APPROVED: ["PROCESSING", "REJECTED"],
-  PROCESSING: ["COMPLETED", "REJECTED"],
+  APPROVED: ["PROCESSING"],
+  PROCESSING: ["COMPLETED"],
   COMPLETED: [],
   REJECTED: [],
   CANCELLED: [],

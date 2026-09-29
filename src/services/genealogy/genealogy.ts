@@ -102,3 +102,19 @@ export async function getGenealogyRoot(memberProfileId: Types.ObjectId, page?: n
   const [ancestors, branch, counts] = await Promise.all([getAncestors(memberProfileId), getDirectChildren(memberProfileId, page, limit), getTeamCounts(memberProfileId)]);
   return { root, ancestors, branch, counts, maxDepth: MAX_GENEALOGY_DEPTH };
 }
+
+/**
+ * Bounded, read-only network inspection facade for administrative clients.
+ * Sponsor relationships are immutable in this application; corrections need a
+ * separately designed, audited migration workflow rather than a tree action.
+ */
+export class GenealogyService {
+  static getSponsor(memberProfileId: Types.ObjectId) { return getSponsor(memberProfileId); }
+  static getDirectReferrals(memberProfileId: Types.ObjectId, page = 1, limit?: number) { return getDirectChildren(memberProfileId, page, limit); }
+  static getAncestors(memberProfileId: Types.ObjectId, depth?: number) { return getAncestors(memberProfileId, depth); }
+  static getDescendants(memberProfileId: Types.ObjectId, depth?: number, page = 1, limit?: number) { return getDescendants(memberProfileId, depth, page, limit); }
+  static getTeamStats(memberProfileId: Types.ObjectId) { return getTeamCounts(memberProfileId); }
+  static getRoot(memberProfileId: Types.ObjectId, page?: number, limit?: number) { return getGenealogyRoot(memberProfileId, page, limit); }
+  static search(query: string) { return searchGenealogy(query); }
+  static getMemberByNumber(memberNumber: string) { return getMemberByNumber(memberNumber); }
+}

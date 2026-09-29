@@ -58,10 +58,11 @@ function assertTargetIsStaff(targetRoles: readonly Pick<AssignableStaffRole, "ba
 }
 
 export class StaffService {
-  static async listAssignableRoles(actor: AuthContext) {
+  static async listAssignableRoles(actor: AuthContext, options: { includeMembers?: boolean } = {}) {
     if (!canCreateStaff(actor) && !canCreateMember(actor) && !(canEditStaff(actor) && canAssignStaffRoles(actor))) return [];
     await connectToDatabase();
-    const roles = await Role.find({ isActive: true, baseRole: { $in: ["ADMIN", "STAFF", "MEMBER"] } })
+    const allowedBaseRoles = options.includeMembers === false ? ["ADMIN", "STAFF"] : ["ADMIN", "STAFF", "MEMBER"];
+    const roles = await Role.find({ isActive: true, baseRole: { $in: allowedBaseRoles } })
       .select("name slug baseRole permissions isActive")
       .sort({ name: 1 })
       .lean();
@@ -71,8 +72,34 @@ export class StaffService {
     });
   }
 
+  /** Returns safe application account data only; Firebase credentials are never read or exposed. */
+  static async getDetail(staffId: string, actor: AuthContext) {
+    if (!Types.ObjectId.isValid(staffId)) throw errors.notFound("Staff account was not found.");
+    await connectToDatabase();
+    const user = await User.findById(staffId).populate("roleIds", "name slug baseRole").lean();
+    if (!user) throw errors.notFound("Staff account was not found.");
+    const roles = user.roleIds as unknown as Array<{ _id: Types.ObjectId; name: string; slug: string; baseRole: AssignableStaffRole["baseRole"] }>;
+    assertTargetIsStaff(roles);
+    return {
+      staff: {
+        id: String(user._id),
+        name: user.displayName,
+        email: user.email,
+        status: user.status,
+        roles: roles.map((role) => ({ id: String(role._id), name: role.name, slug: role.slug, baseRole: role.baseRole })),
+        lastLoginAt: user.lastLoginAt?.toISOString(),
+        createdAt: user.createdAt.toISOString(),
+        canManage: canManageStaffTarget(actor, actor.userId, String(user._id), roles),
+      },
+      assignableRoles: await StaffService.listAssignableRoles(actor, { includeMembers: false }),
+    };
+  }
+
   static async create(input: CreateStaffInput, actor: AuthContext, audit: StaffAuditInput) {
     if (!canCreateStaff(actor)) throw errors.forbidden();
+    // Creating an account in an immediately usable, suspended, or disabled
+    // state is an account-state mutation as well as a provisioning operation.
+    if (input.status !== "PENDING" && !canApplyStaffStatus(actor, input.status)) throw errors.forbidden();
     await connectToDatabase();
     await loadAssignableRole(input.roleId, actor);
     const duplicate = await User.exists({ email: input.email });

@@ -67,3 +67,8 @@ test("handles an incomplete sponsor chain by paying configured available levels 
   const plans = planCommissions({ order, uplines: [{ memberProfileId: "C", activationStatus: "ACTIVE" }], eligibleAt, rules: [rule({ id: "l1", level: 1 }), rule({ id: "l2", level: 2 })] });
   assert.deepEqual(plans.map((plan) => plan.level), [1]);
 });
+
+test("creates no commission when the source member has no sponsor relationship", () => {
+  const plans = planCommissions({ order, uplines: [], eligibleAt, rules: [rule({ id: "direct", commissionType: "DIRECT", level: undefined }), rule({ id: "l1", level: 1 })] });
+  assert.deepEqual(plans, []);
+});

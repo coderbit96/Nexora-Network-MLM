@@ -14,6 +14,7 @@ export const createRoleSchema = z.object({
   description: z.string().trim().max(500).optional().transform((value) => value || undefined),
   baseRole: customBaseRoleSchema,
   permissions: permissionKeysSchema,
+  isActive: z.boolean().default(true),
 });
 
 export const updateRoleSchema = z.object({

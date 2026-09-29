@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import { Types, startSession, disconnect } from "mongoose";
 
 import { connectToDatabase } from "@/lib/db/mongoose";
-import { Cart, Category, CommissionRule, CommissionTransaction, MemberPaymentDetails, MemberProfile, Order, Payment, Product, Role, SponsorRelationship, User, Wallet, WalletTransaction, Withdrawal } from "@/models";
+import { Cart, Category, CommissionRule, CommissionTransaction, MemberPaymentDetails, MemberProfile, Notification, Order, Payment, Product, Role, SponsorRelationship, User, Wallet, WalletTransaction, Withdrawal } from "@/models";
 import { resolveValidUpline } from "@/services/genealogy/sponsor-assignment";
 import { OrderService } from "@/services/orders/order-service";
 import { PaymentService } from "@/services/payments/payment-service";
@@ -185,6 +185,30 @@ test("database E2E: referral registration, verified payment, commissions, and wi
     const exactAmount = 9_007_199_254_740_993n;
     await WalletService.post({ ...posting, memberProfileId: memberA.profileId, amountMinor: exactAmount, idempotencyKey: "precision-credit" });
     assert.equal((await Wallet.findOne({ memberProfileId: memberA.profileId }).lean())?.availableMinor, exactAmount + 200n);
+
+    // Commission processing only accepts a verified payment, not a caller-shaped “paid” order.
+    const unverifiedOrder = await Order.create({ orderNumber: "E2E00000002", memberProfileId: memberC.profileId, currency: "INR", items: [{ productId: product._id, sku: product.sku, name: product.name, quantity: 1, unitPriceMinor: product.priceMinor, lineTotalMinor: product.priceMinor, pv: product.pv, bv: product.bv, commissionEligible: true }], subtotalMinor: product.priceMinor, discountMinor: 0n, taxMinor: 0n, totalMinor: product.priceMinor, status: "PAID", paymentStatus: "PENDING", commissionStatus: "PENDING", checkoutIdempotencyKey: "unverified-commission-order", paidAt: new Date() });
+    const unverifiedResult = await CommissionService.processEligibleOrder(String(unverifiedOrder._id));
+    assert.deepEqual(unverifiedResult, { orderId: String(unverifiedOrder._id), processed: false, reason: "NOT_ELIGIBLE", commissionsCreated: 0, amountMinor: 0n });
+    assert.equal(await CommissionTransaction.countDocuments({ sourceOrderId: unverifiedOrder._id }), 0);
+
+    // A failure after wallet/commission writes but before notification commit must roll back every
+    // financial side effect and release the source order for a later safe retry.
+    const rollbackOrder = await Order.create({ orderNumber: "E2E00000003", memberProfileId: memberC.profileId, currency: "INR", items: [{ productId: product._id, sku: product.sku, name: product.name, quantity: 1, unitPriceMinor: product.priceMinor, lineTotalMinor: product.priceMinor, pv: product.pv, bv: product.bv, commissionEligible: true }], subtotalMinor: product.priceMinor, discountMinor: 0n, taxMinor: 0n, totalMinor: product.priceMinor, status: "PAID", paymentStatus: "SUCCESS", commissionStatus: "PENDING", checkoutIdempotencyKey: "rollback-commission-order", paidAt: new Date() });
+    const walletBeforeRollback = await Wallet.findOne({ memberProfileId: memberB.profileId }).lean();
+    const notificationModel = Notification as unknown as { create: typeof Notification.create };
+    const notificationCreate = Notification.create.bind(Notification);
+    notificationModel.create = (async () => { throw new Error("forced notification failure"); }) as typeof Notification.create;
+    try {
+      await assert.rejects(CommissionService.processEligibleOrder(String(rollbackOrder._id)), /forced notification failure/);
+    } finally {
+      notificationModel.create = notificationCreate;
+    }
+    assert.equal((await Order.findById(rollbackOrder._id).lean())?.commissionStatus, "PENDING");
+    assert.equal(await CommissionTransaction.countDocuments({ sourceOrderId: rollbackOrder._id }), 0);
+    assert.equal(await WalletTransaction.countDocuments({ "metadata.sourceOrderId": String(rollbackOrder._id) }), 0);
+    assert.equal(await Notification.countDocuments({ "metadata.orderId": String(rollbackOrder._id) }), 0);
+    assert.equal((await Wallet.findOne({ memberProfileId: memberB.profileId }).lean())?.availableMinor, walletBeforeRollback?.availableMinor);
   } finally {
     // The explicit database-name guard above makes this cleanup safe and leaves no test financial data behind.
     await database.dropDatabase();

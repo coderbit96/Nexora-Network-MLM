@@ -4,7 +4,7 @@ import { type ClientSession, type Types, startSession } from "mongoose";
 
 import { connectToDatabase } from "@/lib/db/mongoose";
 import { errors } from "@/lib/errors/app-error";
-import { MemberPaymentDetails, MemberProfile, Notification, Wallet, Withdrawal } from "@/models";
+import { MemberPaymentDetails, MemberProfile, Notification, Wallet, WalletTransaction, Withdrawal } from "@/models";
 import type { WithdrawalStatus } from "@/types/domain";
 import { WalletService } from "@/services/wallet/wallet-service";
 import { assertWithdrawalTransition } from "@/services/withdrawal/withdrawal-transitions";
@@ -36,6 +36,19 @@ function duplicateKey(error: unknown) { return typeof error === "object" && erro
 function assertSameRequest(existing: { amountMinor: bigint; currency: string }, input: { amountMinor: bigint; currency?: string }) {
   if (existing.amountMinor !== input.amountMinor || (input.currency && existing.currency !== input.currency.toUpperCase())) {
     throw errors.conflict("This request reference has already been used for a different withdrawal.");
+  }
+}
+
+/** Approval is allowed only while the exact request's wallet reservation still exists and remains funded. */
+async function assertReservationIsIntact(withdrawal: { _id: Types.ObjectId; walletId: Types.ObjectId; memberProfileId: Types.ObjectId; currency: string; amountMinor: bigint }, session: ClientSession) {
+  const withdrawalId = String(withdrawal._id);
+  const [wallet, reservation, settlement] = await Promise.all([
+    Wallet.findById(withdrawal.walletId).session(session).lean(),
+    WalletTransaction.findOne({ memberProfileId: withdrawal.memberProfileId, currency: withdrawal.currency, type: "WITHDRAWAL_RESERVATION", referenceType: "WITHDRAWAL", referenceId: withdrawalId }).session(session).lean(),
+    WalletTransaction.exists({ memberProfileId: withdrawal.memberProfileId, referenceType: "WITHDRAWAL", referenceId: withdrawalId, type: { $in: ["WITHDRAWAL", "WITHDRAWAL_RELEASE"] } }).session(session),
+  ]);
+  if (!wallet || String(wallet.memberProfileId) !== String(withdrawal.memberProfileId) || !reservation || String(reservation.walletId) !== String(withdrawal.walletId) || reservation.amountMinor !== withdrawal.amountMinor || settlement || wallet.heldMinor < withdrawal.amountMinor) {
+    throw errors.conflict("This withdrawal no longer has an intact reserved balance for approval.");
   }
 }
 
@@ -85,6 +98,7 @@ export class WithdrawalService {
         if (!withdrawal) throw errors.notFound("Withdrawal request was not found.");
         if (input.memberInitiated && (input.targetStatus !== "CANCELLED" || !input.memberProfileId || String(withdrawal.memberProfileId) !== String(input.memberProfileId))) throw errors.forbidden();
         try { assertWithdrawalTransition(withdrawal.status, input.targetStatus); } catch (error) { throw errors.conflict(error instanceof Error ? error.message : "Invalid withdrawal transition."); }
+        if (input.targetStatus === "APPROVED") await assertReservationIsIntact(withdrawal, session);
         if (input.targetStatus === "REJECTED" && !input.note?.trim()) throw errors.badRequest("A rejection reason is required.");
         if (input.targetStatus === "COMPLETED" && !input.paymentReference?.trim()) throw errors.badRequest("A payment reference is required when completing a withdrawal.");
         if (input.targetStatus === "REJECTED" || input.targetStatus === "CANCELLED") {
@@ -96,12 +110,13 @@ export class WithdrawalService {
         const previousStatus = withdrawal.status; const now = new Date();
         withdrawal.status = input.targetStatus;
         withdrawal.statusHistory.push({ status: input.targetStatus, changedAt: now, changedByUserId: input.actorUserId, ...(input.note?.trim() ? { note: input.note.trim() } : {}), ...(input.paymentReference?.trim() ? { paymentReference: input.paymentReference.trim() } : {}) });
-        if (!input.memberInitiated) { withdrawal.reviewedByUserId = input.actorUserId; withdrawal.reviewedAt = now; }
+        // Preserve the initial reviewer. Subsequent processing/completion actors remain visible in the status timeline.
+        if (!input.memberInitiated && !withdrawal.reviewedByUserId) { withdrawal.reviewedByUserId = input.actorUserId; withdrawal.reviewedAt = now; }
         if (input.targetStatus === "COMPLETED") { withdrawal.completedAt = now; withdrawal.paymentReference = input.paymentReference!.trim(); }
         await withdrawal.save({ session });
         const member = await MemberProfile.findById(withdrawal.memberProfileId).select("userId").session(session).lean();
         if (member) await Notification.create([{ userId: member.userId, type: "WITHDRAWAL", title: `Withdrawal ${input.targetStatus.toLowerCase()}`, body: input.targetStatus === "COMPLETED" ? "Your withdrawal has been completed." : `Your withdrawal status is now ${input.targetStatus.toLowerCase()}.`, actionUrl: "/member/withdrawals", metadata: { withdrawalId: String(withdrawal._id), ...(input.paymentReference ? { paymentReference: input.paymentReference } : {}) } }], { session });
-        if (!input.memberInitiated) await AuditService.record({ actorUserId: input.actorUserId, action: "withdrawal.status_changed", resourceType: "Withdrawal", resourceId: String(withdrawal._id), ...(input.ipAddress ? { ipAddress: input.ipAddress } : {}), ...(input.userAgent ? { userAgent: input.userAgent } : {}), before: { status: previousStatus }, after: { status: input.targetStatus, ...(input.paymentReference ? { paymentReference: input.paymentReference } : {}) }, metadata: { note: input.note } }, session);
+        await AuditService.record({ actorUserId: input.actorUserId, action: "withdrawal.status_changed", resourceType: "Withdrawal", resourceId: String(withdrawal._id), ...(input.ipAddress ? { ipAddress: input.ipAddress } : {}), ...(input.userAgent ? { userAgent: input.userAgent } : {}), before: { status: previousStatus }, after: { status: input.targetStatus, ...(input.paymentReference ? { paymentReference: input.paymentReference } : {}) }, metadata: { note: input.note, initiatedBy: input.memberInitiated ? "MEMBER" : "ADMIN" } }, session);
         result = { id: String(withdrawal._id), status: input.targetStatus };
       });
       if (!result) throw new Error("Withdrawal transition did not complete."); return result;

@@ -16,7 +16,7 @@ import { canManageRoleDefinition } from "@/services/auth/role-authorization";
 import type { AuthorizationSnapshot } from "@/lib/auth/policy";
 import { PERMISSION_CATALOG, type PermissionKey, type PermissionMetadata } from "@/config/permissions";
 
-type Role = { id: string; name: string; slug: string; description: string; baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" | "MEMBER"; permissions: PermissionKey[]; isSystem: boolean; isActive: boolean };
+type Role = { id: string; name: string; slug: string; description: string; baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" | "MEMBER"; permissions: PermissionKey[]; isSystem: boolean; isActive: boolean; userCount: number };
 type RolePayload = { success: true; data: { items: Role[] } } | { success: false; error?: { message?: string } };
 type Draft = Pick<Role, "name" | "slug" | "description" | "baseRole" | "permissions" | "isActive">;
 const emptyDraft: Draft = { name: "", slug: "", description: "", baseRole: "STAFF", permissions: [], isActive: true };
@@ -30,7 +30,7 @@ const baseHelp: Record<Role["baseRole"], string> = {
 function errorMessage(value: { error?: { message?: string } }) { return value.error?.message ?? "The role could not be saved. Please try again."; }
 function slugFromName(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100); }
 
-export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStatus, actor }: { actor: AuthorizationSnapshot; canCreate: boolean; canEdit: boolean; canDelete: boolean; canManageSystemStatus: boolean }) {
+export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStatus, actor, initialCreate = false, initialRoleId }: { actor: AuthorizationSnapshot; canCreate: boolean; canEdit: boolean; canDelete: boolean; canManageSystemStatus: boolean; initialCreate?: boolean; initialRoleId?: string }) {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -41,6 +41,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
   const [saving, setSaving] = useState(false);
   const [permissionSearch, setPermissionSearch] = useState("");
   const editorScrollRef = useRef<HTMLDivElement>(null);
+  const openedInitialEditor = useRef(false);
 
   const groups = useMemo(() => {
     const results = new Map<string, PermissionMetadata[]>();
@@ -56,13 +57,34 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/v1/admin/management/roles?limit=100", { cache: "no-store" });
+      const response = await fetch("/api/v1/admin/roles?limit=100", { cache: "no-store" });
       const body = await response.json() as RolePayload;
       if (!response.ok || !body.success) throw new Error(errorMessage(body as { error?: { message?: string } }));
       setRoles(body.data.items); setFailed(false);
     } catch (error) { setFailed(true); toast.error(error instanceof Error ? error.message : "Roles could not be loaded."); }
   }, []);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
+  useEffect(() => {
+    if (!roles || openedInitialEditor.current) return;
+    if (initialCreate) {
+      openedInitialEditor.current = true;
+      if (canCreate) openCreate();
+      return;
+    }
+    if (!initialRoleId) return;
+    const current = roles.find((role) => role.id === initialRoleId);
+    if (current) { openedInitialEditor.current = true; openEdit(current); return; }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/admin/roles/${initialRoleId}`, { cache: "no-store" });
+        const body = await response.json() as { success?: boolean; data?: Role; error?: { message?: string } };
+        if (!response.ok || !body.success || !body.data) throw new Error(body.error?.message ?? "Role could not be loaded.");
+        openedInitialEditor.current = true;
+        setRoles((currentRoles) => currentRoles ? [...currentRoles, body.data as Role] : currentRoles);
+        openEdit(body.data as Role);
+      } catch (error) { setFailed(true); toast.error(error instanceof Error ? error.message : "Role could not be loaded."); }
+    })();
+  }, [roles, initialCreate, initialRoleId, canCreate]);
   useEffect(() => {
     if (dialogOpen) requestAnimationFrame(() => editorScrollRef.current?.scrollTo({ top: 0 }));
   }, [dialogOpen, editing?.id]);
@@ -76,7 +98,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
     if (!draft.name.trim() || !draft.slug.trim()) { toast.error("Enter both a role name and role slug."); return; }
     setSaving(true);
     try {
-      const payload = editing?.isSystem ? { description: draft.description || null, permissions: draft.permissions } : { name: draft.name, slug: draft.slug, description: draft.description || undefined, baseRole: draft.baseRole, permissions: draft.permissions, ...(editing ? { isActive: draft.isActive } : {}) };
+      const payload = editing?.isSystem ? { description: draft.description || null, permissions: draft.permissions } : { name: draft.name, slug: draft.slug, description: draft.description || undefined, baseRole: draft.baseRole, permissions: draft.permissions, isActive: draft.isActive };
       const response = await fetch(editing ? "/api/v1/admin/roles/" + editing.id : "/api/v1/admin/roles", { method: editing ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json() as { success: boolean; error?: { message?: string } };
       if (!response.ok || !body.success) throw new Error(errorMessage(body));
@@ -116,7 +138,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
         {canCreate ? <Button onClick={openCreate}><Plus className="size-4" />Create role</Button> : null}
       </CardHeader>
       <CardContent>
-        {roles.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Workspace</TableHead><TableHead>Functions</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{roles.map((role) => <TableRow key={role.id}><TableCell><p className="font-medium">{role.name}</p><p className="text-xs text-muted-foreground">{role.slug}</p></TableCell><TableCell><Badge variant={role.isSystem ? "warning" : "secondary"}>{role.baseRole}</Badge></TableCell><TableCell className="text-sm text-muted-foreground">{role.baseRole === "SUPER_ADMIN" ? "Implicit unrestricted access" : role.permissions.length + " selected"}</TableCell><TableCell><Badge variant={role.isActive ? "success" : "secondary"}>{role.isActive ? "ACTIVE" : "INACTIVE"}</Badge></TableCell><TableCell><div className="flex justify-end gap-2">{canEdit && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" onClick={() => openEdit(role)}><Pencil className="size-4" />Edit</Button> : null}{canChangeStatus(role) ? <Button variant="outline" size="sm" onClick={() => setChangingStatus(role)}><Power className="size-4" />{role.isActive ? "Deactivate" : "Activate"}</Button> : null}{canDelete && !role.isSystem && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleting(role)}><Trash2 className="size-4" />Delete</Button> : null}</div></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyState title="No roles found" description="Create a custom role to delegate scoped administrative access." />}
+        {roles.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Base role</TableHead><TableHead>Users</TableHead><TableHead>Permissions</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{roles.map((role) => <TableRow key={role.id}><TableCell><p className="font-medium">{role.name}{role.isSystem ? <Badge className="ml-2" variant="warning">System</Badge> : null}</p><p className="text-xs text-muted-foreground">{role.slug}</p></TableCell><TableCell><Badge variant={role.isSystem ? "warning" : "secondary"}>{role.baseRole}</Badge></TableCell><TableCell>{role.userCount.toLocaleString("en-IN")}</TableCell><TableCell className="text-sm text-muted-foreground">{role.baseRole === "SUPER_ADMIN" ? "Implicit unrestricted access" : role.permissions.length + " selected"}</TableCell><TableCell><Badge variant={role.isActive ? "success" : "secondary"}>{role.isActive ? "ACTIVE" : "INACTIVE"}</Badge></TableCell><TableCell><div className="flex justify-end gap-2">{canEdit && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" onClick={() => openEdit(role)}><Pencil className="size-4" />Edit</Button> : null}{canChangeStatus(role) ? <Button variant="outline" size="sm" onClick={() => setChangingStatus(role)}><Power className="size-4" />{role.isActive ? "Deactivate" : "Activate"}</Button> : null}{canDelete && !role.isSystem && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleting(role)}><Trash2 className="size-4" />Delete</Button> : null}</div></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyState title="No roles found" description="Create a custom role to delegate scoped administrative access." />}
       </CardContent>
     </Card>
 
@@ -132,7 +154,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
         <div ref={editorScrollRef} className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6"><div className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="role-name">Role name</label><Input id="role-name" className="mt-2" value={draft.name} disabled={Boolean(editing?.isSystem)} onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value, ...(!editing && !value.slug ? { slug: slugFromName(event.target.value) } : {}) }))} /></div><div><label className="text-sm font-medium" htmlFor="role-slug">Role slug</label><Input id="role-slug" className="mt-2" value={draft.slug} disabled={Boolean(editing)} onChange={(event) => setDraft((value) => ({ ...value, slug: slugFromName(event.target.value) }))} /><p className="mt-1 text-xs text-muted-foreground">Used internally; it cannot change after creation.</p></div></div>
           <div><label className="text-sm font-medium" htmlFor="role-description">What is this role for?</label><textarea id="role-description" value={draft.description} maxLength={500} placeholder="Example: Reviews pending withdrawals but cannot complete payments." onChange={(event) => setDraft((value) => ({ ...value, description: event.target.value }))} className="mt-2 min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" /></div>
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]"><div><label className="text-sm font-medium" htmlFor="role-base">Workspace access</label><select id="role-base" value={draft.baseRole} disabled={Boolean(editing?.isSystem)} onChange={(event) => setDraft((value) => ({ ...value, baseRole: event.target.value as Draft["baseRole"] }))} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="STAFF">STAFF — delegated admin workspace (recommended)</option><option value="ADMIN">ADMIN — elevated admin workspace</option><option value="MEMBER">MEMBER — member workspace only</option>{editing?.isSystem ? <option value="SUPER_ADMIN">SUPER_ADMIN — unrestricted system role</option> : null}</select><p className="mt-1 text-xs text-muted-foreground">{baseHelp[draft.baseRole]}</p></div>{editing && !editing.isSystem ? <label className="mt-7 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft((value) => ({ ...value, isActive: event.target.checked }))} />Active role</label> : null}</div>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]"><div><label className="text-sm font-medium" htmlFor="role-base">Workspace access</label><select id="role-base" value={draft.baseRole} disabled={Boolean(editing?.isSystem)} onChange={(event) => setDraft((value) => ({ ...value, baseRole: event.target.value as Draft["baseRole"] }))} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"><option value="STAFF">STAFF — delegated admin workspace (recommended)</option><option value="ADMIN">ADMIN — elevated admin workspace</option><option value="MEMBER">MEMBER — member workspace only</option>{editing?.isSystem ? <option value="SUPER_ADMIN">SUPER_ADMIN — unrestricted system role</option> : null}</select><p className="mt-1 text-xs text-muted-foreground">{baseHelp[draft.baseRole]}</p></div>{!editing?.isSystem ? <label className="mt-7 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft((value) => ({ ...value, isActive: event.target.checked }))} />Active role</label> : null}</div>
           {draft.baseRole === "SUPER_ADMIN" ? <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"><ShieldAlert className="mr-2 inline size-4" />Super Admin access is implicit. Permission checkboxes cannot limit or expand this role.</div> : <fieldset><div className="flex flex-wrap items-start justify-between gap-3"><div><legend className="font-medium">Functions this role can use</legend><p className="mt-1 text-xs text-muted-foreground">Selected: {draft.permissions.length}. Sensitive functions should be granted only to trusted operators.</p></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allVisibleSelected} onChange={(event) => changeVisible(event.target.checked)} />Select visible</label></div><div className="relative mt-3"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} className="pl-9" placeholder="Search a function, e.g. approve withdrawal" aria-label="Search role permissions" /></div><div className="mt-3 max-h-[min(44dvh,32rem)] overflow-y-auto rounded-xl border p-3"><div className="grid gap-3 md:grid-cols-2">{visibleGroups.map(([category, permissions]) => <div className="rounded-lg border bg-muted/20 p-3" key={category}><p className="text-xs font-bold tracking-wide text-muted-foreground">{category}</p><div className="mt-2 space-y-3">{permissions.map((permission) => <label key={permission.key} className="flex cursor-pointer items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.permissions.includes(permission.key)} onChange={(event) => changePermission(permission.key, event.target.checked)} /><span><span className="font-medium">{permission.label}</span>{permission.sensitive ? <Badge className="ml-2" variant="warning">Sensitive</Badge> : null}<code className="mt-0.5 block text-xs text-primary">{permission.key}</code><span className="mt-1 block text-xs leading-5 text-muted-foreground">{permission.description}</span></span></label>)}</div></div>)}{!visibleGroups.length ? <p className="col-span-full py-6 text-center text-sm text-muted-foreground">No functions match this search.</p> : null}</div></div></fieldset>}
         </div></div>
         <DialogFooter className="relative z-10 shrink-0 border-t bg-background px-5 py-4 sm:px-6"><Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button><Button onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : <><Check className="size-4" />Save role</>}</Button></DialogFooter>

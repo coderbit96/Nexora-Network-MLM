@@ -56,7 +56,7 @@ export const adminNavigation: NavigationItem[] = [
   { label: "Orders", href: "/admin/orders", icon: ReceiptText, permission: PERMISSION.ORDERS.VIEW_ALL },
   { label: "Payments", href: "/admin/payments", icon: ReceiptText, permission: PERMISSION.PAYMENTS.VIEW },
   { label: "Reports", href: "/admin/reports", icon: ChartNoAxesCombined, permission: PERMISSION.REPORTS.VIEW },
-  { label: "Wallet ledger", href: "/admin/wallet-transactions", icon: WalletCards, permission: PERMISSION.WALLET.VIEW_ALL },
+  { label: "Wallet ledger", href: "/admin/wallet-ledger", icon: WalletCards, permission: PERMISSION.WALLET.VIEW_ALL },
   { label: "Staff", href: "/admin/staff", icon: ShieldCheck, permission: PERMISSION.STAFF.VIEW },
   { label: "Roles", href: "/admin/roles", icon: ShieldCheck, permission: PERMISSION.ROLES.VIEW },
   { label: "Permissions", href: "/admin/permissions", icon: ShieldCheck, permission: PERMISSION.ROLES.VIEW },

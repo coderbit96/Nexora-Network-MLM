@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 
+import { PERMISSION } from "@/config/permissions";
 import { apiSuccess, withApiErrorHandling } from "@/lib/api";
 import { requirePermission } from "@/lib/auth/authorization";
 import { errors } from "@/lib/errors/app-error";
@@ -9,6 +10,13 @@ import { withdrawalTransitionSchema } from "@/lib/validation/withdrawal";
 import { permissionForAdministrativeWithdrawalTransition } from "@/services/withdrawal/withdrawal-authorization";
 import { WithdrawalService } from "@/services/withdrawal/withdrawal-service";
 import { getAuditRequestContext } from "@/services/audit/audit-service";
+import { getAdminWithdrawalDetail } from "@/services/withdrawal/admin-withdrawal-query";
+
+export const GET = withApiErrorHandling(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+  await requirePermission(PERMISSION.WITHDRAWALS.VIEW_ALL, request);
+  const { id } = await params;
+  return apiSuccess(await getAdminWithdrawalDetail(id));
+});
 
 export const PATCH = withApiErrorHandling(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   const body = await parseJsonBody(request, withdrawalTransitionSchema);

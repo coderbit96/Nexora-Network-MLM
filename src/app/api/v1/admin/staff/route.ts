@@ -49,6 +49,7 @@ export const GET = withApiErrorHandling(async (request: Request) => {
       email: row.email,
       status: row.status,
       roles: (row.roleIds as unknown as Array<{ id?: string; _id: { toString(): string }; name: string; slug: string; baseRole: string }>).map((role) => ({ id: String(role._id), name: role.name, slug: role.slug, baseRole: role.baseRole })),
+      lastLoginAt: row.lastLoginAt?.toISOString(),
       createdAt: row.createdAt.toISOString(),
       canManage: canManageStaffTarget(context, context.userId, String(row._id), row.roleIds as unknown as Array<{ baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" | "MEMBER" }>),
     })),

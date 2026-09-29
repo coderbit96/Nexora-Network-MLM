@@ -68,7 +68,15 @@ test("super admin still follows the state machine while receiving all valid capa
   const superAdmin: AuthorizationSnapshot = { status: "ACTIVE", roles: ["SUPER_ADMIN"], permissions: [] };
 
   assert.deepEqual(allowedAdministrativeWithdrawalTransitions(superAdmin, "PENDING"), ["APPROVED", "REJECTED"]);
-  assert.deepEqual(allowedAdministrativeWithdrawalTransitions(superAdmin, "APPROVED"), ["PROCESSING", "REJECTED"]);
-  assert.deepEqual(allowedAdministrativeWithdrawalTransitions(superAdmin, "PROCESSING"), ["COMPLETED", "REJECTED"]);
+  assert.deepEqual(allowedAdministrativeWithdrawalTransitions(superAdmin, "APPROVED"), ["PROCESSING"]);
+  assert.deepEqual(allowedAdministrativeWithdrawalTransitions(superAdmin, "PROCESSING"), ["COMPLETED"]);
   assert.equal(canAdministrativelyTransitionWithdrawal(superAdmin, "PENDING", "COMPLETED"), false);
+});
+
+test("rejection and member cancellation are only available while a request is pending", () => {
+  assert.equal(WITHDRAWAL_TRANSITIONS.PENDING.includes("REJECTED"), true);
+  assert.equal(WITHDRAWAL_TRANSITIONS.PENDING.includes("CANCELLED"), true);
+  assert.equal(WITHDRAWAL_TRANSITIONS.APPROVED.includes("REJECTED"), false);
+  assert.equal(WITHDRAWAL_TRANSITIONS.PROCESSING.includes("REJECTED"), false);
+  assert.equal(WITHDRAWAL_TRANSITIONS.APPROVED.includes("CANCELLED"), false);
 });

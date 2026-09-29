@@ -74,3 +74,12 @@ test("status controls retain separate edit and disable permissions", () => {
   assert.equal(canApplyStaffStatus(disableOnly, "DISABLED"), true);
   assert.equal(canApplyStaffStatus(disableOnly, "ACTIVE"), false);
 });
+
+test("a staff creator without status authority cannot provision an immediately usable account", () => {
+  const createOnly = { status: "ACTIVE" as const, roles: ["STAFF" as const], permissions: [PERMISSION.STAFF.CREATE, PERMISSION.ROLES.ASSIGN] };
+
+  assert.equal(canCreateStaff(createOnly), true);
+  assert.equal(canApplyStaffStatus(createOnly, "ACTIVE"), false);
+  assert.equal(canApplyStaffStatus(createOnly, "SUSPENDED"), false);
+  assert.equal(canApplyStaffStatus(createOnly, "DISABLED"), false);
+});

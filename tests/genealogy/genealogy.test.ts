@@ -3,6 +3,7 @@ import test from "node:test";
 import { Types } from "mongoose";
 
 import { MAX_GENEALOGY_DEPTH } from "@/config/genealogy";
+import { GenealogyService } from "@/services/genealogy/genealogy";
 import { levelFromUpline } from "@/services/genealogy/genealogy-utils";
 
 // Seeded in-memory multi-level network: Ada → Ben → Chloe → Dev.
@@ -17,4 +18,13 @@ test("calculates levels in a seeded multi-level genealogy", () => {
 
 test("genealogy depth is explicitly bounded", () => {
   assert.equal(MAX_GENEALOGY_DEPTH, 10);
+});
+
+test("the genealogy inspection service exposes only bounded read operations", () => {
+  assert.equal(typeof GenealogyService.getSponsor, "function");
+  assert.equal(typeof GenealogyService.getDirectReferrals, "function");
+  assert.equal(typeof GenealogyService.getAncestors, "function");
+  assert.equal(typeof GenealogyService.getDescendants, "function");
+  assert.equal(typeof GenealogyService.getTeamStats, "function");
+  assert.equal("updateSponsor" in GenealogyService, false);
 });

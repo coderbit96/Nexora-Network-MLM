@@ -7,6 +7,13 @@ import { getAuditRequestContext } from "@/services/audit/audit-service";
 import { RoleService } from "@/services/auth/role-service";
 import { updateRoleSchema } from "@/lib/validation/roles";
 import { objectIdSchema, parseJsonBody } from "@/lib/validation/request";
+import { getRoleManagementDetail } from "@/services/auth/role-management-query";
+
+export const GET = withApiErrorHandling(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
+  await requirePermission(PERMISSION.ROLES.VIEW, request);
+  const id = objectIdSchema.parse((await params).id);
+  return apiSuccess(await getRoleManagementDetail(id));
+});
 
 export const PATCH = withApiErrorHandling(async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
   const context = await requirePermission(PERMISSION.ROLES.EDIT, request);

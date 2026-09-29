@@ -1,3 +1,6 @@
-import { ManagementTable } from "@/components/admin/management-table";
-import { AdminPageHeader } from "@/components/admin/admin-page-header";
-export default function WalletTransactionsPage() { return <><AdminPageHeader eyebrow="Financial operations" title="Wallet transactions" description="Platform-wide immutable wallet ledger inspection." /><ManagementTable resource="wallet-transactions" title="Wallet ledger" description="Ledger rows are append-only and never altered through this screen." statuses={["DIRECT_COMMISSION", "LEVEL_COMMISSION", "WITHDRAWAL", "ADMIN_CREDIT", "ADMIN_DEBIT"]} columns={[{ key: "type", label: "Type" }, { key: "direction", label: "Direction", type: "badge" }, { key: "amountMinor", label: "Amount", type: "money" }, { key: "description", label: "Description" }, { key: "reference", label: "Reference" }, { key: "createdAt", label: "Time", type: "date" }]} /></>; }
+import { redirect } from "next/navigation";
+
+/** Retain the earlier URL for bookmarks while the dedicated ledger lives at /admin/wallet-ledger. */
+export default function WalletTransactionsPage() {
+  redirect("/admin/wallet-ledger");
+}

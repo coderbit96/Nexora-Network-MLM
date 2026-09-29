@@ -1,3 +1,4 @@
-import { ManagementTable } from "@/components/admin/management-table";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-export default function CommissionsPage() { return <><AdminPageHeader eyebrow="Financial operations" title="Commissions" description="Immutable referral and level commission history." /><ManagementTable resource="commissions" title="Commission activity" description="Commission records cannot be edited; corrections require compensating entries." statuses={["PENDING", "APPROVED", "REVERSED", "VOID"]} searchPlaceholder="Filter by status" columns={[{ key: "member", label: "Beneficiary" }, { key: "memberNumber", label: "Member ID" }, { key: "type", label: "Type" }, { key: "level", label: "Level" }, { key: "amountMinor", label: "Amount", type: "money" }, { key: "status", label: "Status", type: "badge" }, { key: "createdAt", label: "Created", type: "date" }]} /></>; }
+import { CommissionManager } from "@/components/admin/commission-manager";
+
+export default function CommissionsPage() { return <><AdminPageHeader eyebrow="Financial operations" title="Commissions" description="Effective-dated direct and level rules with immutable transaction history." /><CommissionManager /></>; }
