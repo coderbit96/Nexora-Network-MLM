@@ -25,6 +25,8 @@ test("level commission rules require a level and fixed rules require an amount",
 
 test("wallet ledger query updates are blocked", async () => {
   await assert.rejects(WalletTransaction.updateOne({}, { $set: { description: "edited" } }).exec(), /immutable/i);
+  await assert.rejects(WalletTransaction.findOneAndDelete({}).exec(), /cannot be deleted/i);
+  await assert.rejects(WalletTransaction.findOneAndReplace({}, { description: "edited" }).exec(), /immutable/i);
 });
 
 test("commission entitlement identity has a database unique index", () => {

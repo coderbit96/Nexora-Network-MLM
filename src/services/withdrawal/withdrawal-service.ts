@@ -33,6 +33,12 @@ async function withdrawalLimits(session: ClientSession) {
 
 function duplicateKey(error: unknown) { return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === 11000; }
 
+function assertSameRequest(existing: { amountMinor: bigint; currency: string }, input: { amountMinor: bigint; currency?: string }) {
+  if (existing.amountMinor !== input.amountMinor || (input.currency && existing.currency !== input.currency.toUpperCase())) {
+    throw errors.conflict("This request reference has already been used for a different withdrawal.");
+  }
+}
+
 export class WithdrawalService {
   static async request(input: { memberProfileId: Types.ObjectId; amountMinor: bigint; idempotencyKey: string; currency?: string }): Promise<WithdrawalResult> {
     if (input.amountMinor <= 0n) throw errors.badRequest("Withdrawal amount must be greater than zero.");
@@ -41,7 +47,7 @@ export class WithdrawalService {
     try {
       await session.withTransaction(async () => {
         const existing = await Withdrawal.findOne({ memberProfileId: input.memberProfileId, idempotencyKey: input.idempotencyKey }).session(session).lean();
-        if (existing) { result = { id: String(existing._id), created: false, status: existing.status }; return; }
+        if (existing) { assertSameRequest(existing, input); result = { id: String(existing._id), created: false, status: existing.status }; return; }
         const [profile, payment, limits] = await Promise.all([
           MemberProfile.findById(input.memberProfileId).select("userId activationStatus").session(session).lean(),
           MemberPaymentDetails.findOne({ memberProfileId: input.memberProfileId }).select("accountLast4 updatedAt").session(session).lean(),
@@ -55,7 +61,7 @@ export class WithdrawalService {
         const wallet = await Wallet.findOne({ memberProfileId: input.memberProfileId, currency }).session(session).lean();
         if (!wallet) throw errors.notFound("The member wallet was not found.");
         const provisional = await Withdrawal.create([{ memberProfileId: input.memberProfileId, walletId: wallet._id, currency, amountMinor: input.amountMinor, status: "PENDING", idempotencyKey: input.idempotencyKey, destinationSnapshot: payment ? { accountLast4: payment.accountLast4, detailsUpdatedAt: payment.updatedAt.toISOString() } : { paymentDetailsRequired: false }, statusHistory: [{ status: "PENDING", changedAt: new Date() }] }], { session });
-        await WalletService.postInTransaction({ memberProfileId: input.memberProfileId, currency, type: "WITHDRAWAL_RESERVATION", direction: "DEBIT", amountMinor: input.amountMinor, referenceType: "WITHDRAWAL", referenceId: String(provisional[0]._id), idempotencyKey: `withdrawal-reserve:${input.idempotencyKey}`, description: "Funds reserved for withdrawal request", metadata: { withdrawalId: String(provisional[0]._id) } }, session);
+        await WalletService.postInTransaction({ memberProfileId: input.memberProfileId, currency, type: "WITHDRAWAL_RESERVATION", direction: "DEBIT", amountMinor: input.amountMinor, referenceType: "WITHDRAWAL", referenceId: String(provisional[0]._id), idempotencyKey: `withdrawal-reserve:${String(provisional[0]._id)}`, description: "Funds reserved for withdrawal request", metadata: { withdrawalId: String(provisional[0]._id) } }, session);
         await Notification.create([{ userId: profile.userId, type: "WITHDRAWAL", title: "Withdrawal requested", body: "Your withdrawal request is pending review.", actionUrl: "/member/withdrawals", metadata: { withdrawalId: String(provisional[0]._id), amountMinor: input.amountMinor.toString(), currency } }], { session });
         await notifyAdministrators({ type: "WITHDRAWAL", title: "Withdrawal requires review", body: "A member submitted a withdrawal request.", actionUrl: "/admin/withdrawals", metadata: { withdrawalId: String(provisional[0]._id) }, session });
         result = { id: String(provisional[0]._id), created: true, status: "PENDING" };
@@ -66,6 +72,7 @@ export class WithdrawalService {
       if (!duplicateKey(error)) throw error;
       const existing = await Withdrawal.findOne({ memberProfileId: input.memberProfileId, idempotencyKey: input.idempotencyKey }).lean();
       if (!existing) throw error;
+      assertSameRequest(existing, input);
       return { id: String(existing._id), created: false, status: existing.status };
     } finally { await session.endSession(); }
   }

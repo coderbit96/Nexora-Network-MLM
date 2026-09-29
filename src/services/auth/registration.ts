@@ -16,7 +16,7 @@ type RegisterInput = { email: string; password: string; firstName: string; lastN
 function generateReferralCode() { return randomBytes(5).toString("hex").toUpperCase(); }
 
 async function nextMemberNumber(session: ClientSession) {
-  const counter = await SystemCounter.findByIdAndUpdate("member-number", { $inc: { sequence: 1 } }, { new: true, upsert: true, session, setDefaultsOnInsert: true });
+  const counter = await SystemCounter.findByIdAndUpdate("member-number", { $inc: { sequence: 1 } }, { returnDocument: "after", upsert: true, session, setDefaultsOnInsert: true });
   if (!counter) throw new Error("Could not allocate a member number.");
   return `MLM${counter.sequence.toString().padStart(6, "0")}`;
 }

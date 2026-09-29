@@ -18,6 +18,7 @@ export async function requireAdminShell(nextPath = "/admin"): Promise<AuthContex
     return await requireAuth();
   } catch (error) {
     if (error instanceof AppError && error.code === "UNAUTHORIZED") redirect(loginUrl(nextPath));
+    if (!(error instanceof AppError) || error.statusCode !== 403) throw error;
     // A verified identity with an inactive application account belongs on the
     // same safe 403 boundary as an authenticated user missing a permission.
     forbidden();
@@ -34,6 +35,7 @@ export async function requireAdminPagePermission(permission: PermissionKey, next
     context = await requireAuth();
   } catch (error) {
     if (error instanceof AppError && error.code === "UNAUTHORIZED") redirect(loginUrl(nextPath));
+    if (!(error instanceof AppError) || error.statusCode !== 403) throw error;
     forbidden();
   }
 

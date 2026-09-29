@@ -6,7 +6,9 @@ import { PERMISSION } from "@/config/permissions";
 import { createStaffSchema, updateStaffSchema } from "@/lib/validation/staff";
 import {
   canApplyStaffStatus,
+  canAssignMemberRole,
   canAssignStaffRole,
+  canCreateMember,
   canCreateStaff,
   canManageStaffTarget,
   type AssignableStaffRole,
@@ -38,6 +40,15 @@ test("an administrator can assign only staff roles whose grants they already hol
   assert.equal(canAssignStaffRole(adminActor, staffRole({ baseRole: "ADMIN" })), false);
   assert.equal(canAssignStaffRole(adminActor, staffRole({ baseRole: "SUPER_ADMIN", name: "SUPER_ADMIN", slug: "super-admin", permissions: [] })), false);
   assert.equal(canAssignStaffRole(adminActor, staffRole({ permissions: [PERMISSION.SETTINGS.MANAGE] })), false);
+});
+
+test("member provisioning requires member-create and role-assignment grants", () => {
+  const memberRole = staffRole({ baseRole: "MEMBER", name: "MEMBER", slug: "member", permissions: [PERMISSION.WITHDRAWALS.VIEW] });
+  const memberCreator = { status: "ACTIVE" as const, roles: ["ADMIN" as const], permissions: [PERMISSION.MEMBERS.CREATE, PERMISSION.ROLES.ASSIGN, PERMISSION.WITHDRAWALS.VIEW] };
+  assert.equal(canCreateMember(memberCreator), true);
+  assert.equal(canAssignMemberRole(memberCreator, memberRole), true);
+  assert.equal(canAssignMemberRole({ ...memberCreator, permissions: [PERMISSION.MEMBERS.CREATE, PERMISSION.ROLES.ASSIGN] }, memberRole), false);
+  assert.equal(canAssignMemberRole(memberCreator, staffRole()), false);
 });
 
 test("only an explicit super admin can create or manage privileged staff accounts", () => {

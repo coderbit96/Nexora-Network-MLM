@@ -16,14 +16,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDateTime } from "@/lib/utils/format";
 
 type Status = "PENDING" | "ACTIVE" | "SUSPENDED" | "DISABLED";
-type Role = { id: string; name: string; slug: string; baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" };
+type Role = { id: string; name: string; slug: string; baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" | "MEMBER" };
 type Staff = { id: string; name: string; email: string; status: Status; roles: Role[]; createdAt: string; canManage: boolean };
-type Capabilities = { canCreate: boolean; canEdit: boolean; canDisable: boolean; canAssignRoles: boolean };
+type Capabilities = { canCreate: boolean; canCreateMember: boolean; canEdit: boolean; canDisable: boolean; canAssignRoles: boolean };
 type Data = { items: Staff[]; pagination: { total: number; page: number; limit: number; totalPages: number }; capabilities: Capabilities; assignableRoles: Role[] };
 type Api<T> = { success: true; data: T } | { success: false; error?: { message?: string } };
-type Draft = { name: string; email: string; password: string; confirmPassword: string; roleId: string; status: Status };
+type Draft = { name: string; firstName: string; lastName: string; sponsorReferralCode: string; email: string; password: string; confirmPassword: string; roleId: string; status: Status };
 
-const emptyDraft: Draft = { name: "", email: "", password: "", confirmPassword: "", roleId: "", status: "ACTIVE" };
+const emptyDraft: Draft = { name: "", firstName: "", lastName: "", sponsorReferralCode: "", email: "", password: "", confirmPassword: "", roleId: "", status: "ACTIVE" };
 const statuses: Status[] = ["PENDING", "ACTIVE", "SUSPENDED", "DISABLED"];
 
 function responseMessage(response: Api<unknown>) {
@@ -77,7 +77,7 @@ export function StaffManager() {
 
   function openEdit(staff: Staff) {
     setEditing(staff);
-    setDraft({ name: staff.name, email: staff.email, password: "", confirmPassword: "", roleId: staff.roles[0]?.id ?? "", status: staff.status });
+    setDraft({ ...emptyDraft, name: staff.name, email: staff.email, password: "", confirmPassword: "", roleId: staff.roles[0]?.id ?? "", status: staff.status });
     setDisableConfirmed(false);
     setDialogOpen(true);
   }
@@ -92,8 +92,14 @@ export function StaffManager() {
 
   async function save() {
     if (!data) return;
+    const selectedRole = data.assignableRoles.find((role) => role.id === draft.roleId);
+    const creatingMember = !editing && selectedRole?.baseRole === "MEMBER";
     if (!editing && draft.password !== draft.confirmPassword) {
       toast.error("The passwords do not match.");
+      return;
+    }
+    if (creatingMember && (!draft.firstName.trim() || !draft.lastName.trim())) {
+      toast.error("Enter the member's first and last name.");
       return;
     }
     if (draft.status === "DISABLED" && !disableConfirmed) {
@@ -106,7 +112,7 @@ export function StaffManager() {
           ...(data.capabilities.canEdit && data.capabilities.canAssignRoles && draft.roleId !== editing.roles[0]?.id ? { roleId: draft.roleId } : {}),
           ...(draft.status !== editing.status ? { status: draft.status } : {}),
         }
-      : { name: draft.name, email: draft.email, password: draft.password, roleId: draft.roleId, status: draft.status };
+      : { name: creatingMember ? `${draft.firstName.trim()} ${draft.lastName.trim()}` : draft.name, email: draft.email, password: draft.password, roleId: draft.roleId, status: draft.status, ...(creatingMember ? { firstName: draft.firstName.trim(), lastName: draft.lastName.trim(), ...(draft.sponsorReferralCode.trim() ? { sponsorReferralCode: draft.sponsorReferralCode.trim().toUpperCase() } : {}) } : {}) };
     if (editing && !Object.keys(payload).length) {
       setDialogOpen(false);
       return;
@@ -120,7 +126,7 @@ export function StaffManager() {
       });
       const result = await response.json() as Api<unknown>;
       if (!response.ok || !result.success) throw new Error(responseMessage(result));
-      toast.success(editing ? "Staff account updated." : "Staff account created. The user can now sign in with the assigned password.");
+      toast.success(editing ? "Account updated." : creatingMember ? "Member account created with profile, wallet, and referral identity." : "Team account created. The user can now sign in with the assigned password.");
       setDialogOpen(false);
       await load();
     } catch (error) {
@@ -135,11 +141,13 @@ export function StaffManager() {
 
   const mayMutate = data.capabilities.canEdit || data.capabilities.canDisable || (data.capabilities.canEdit && data.capabilities.canAssignRoles);
   const statusOptions = permittedStatusOptions();
+  const selectedRole = data.assignableRoles.find((role) => role.id === draft.roleId);
+  const creatingMember = !editing && selectedRole?.baseRole === "MEMBER";
   return <>
     <Card>
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><CardTitle>Admin & staff accounts</CardTitle><CardDescription>Assign only active, database-backed Admin or Staff roles with a secure sign-in credential.</CardDescription></div>
-        {data.capabilities.canCreate && data.assignableRoles.length ? <Button onClick={openCreate}><UserRoundPlus className="size-4" />Add team account</Button> : null}
+        <div><CardTitle>Team & member accounts</CardTitle><CardDescription>Create secure Admin, Staff, or Member identities. Member creation also initializes the profile, wallet, and referral identity.</CardDescription></div>
+        {(data.capabilities.canCreate || data.capabilities.canCreateMember) && data.assignableRoles.length ? <Button onClick={openCreate}><UserRoundPlus className="size-4" />Add account</Button> : null}
       </CardHeader>
       <CardContent>
         <form className="mb-5 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuerySearch(search.trim()); }}>
@@ -153,14 +161,15 @@ export function StaffManager() {
       </CardContent>
     </Card>
 
-    <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}><DialogContent><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : "Add team account"}</DialogTitle><DialogDescription>{editing ? "Role and account-state changes are audited. You cannot edit your own team account here." : "Create an Admin or Staff Firebase sign-in with the secure password you set. The password is never stored in the application database or audit log."}</DialogDescription></DialogHeader>
-      <div className="grid gap-4"><div><label className="text-sm font-medium" htmlFor="staff-name">Name</label><Input id="staff-name" className="mt-2" value={draft.name} disabled={Boolean(editing && !data.capabilities.canEdit)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></div>
+    <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}><DialogContent><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : creatingMember ? "Add member account" : "Add team account"}</DialogTitle><DialogDescription>{editing ? "Role and account-state changes are audited. You cannot edit your own team account here." : creatingMember ? "Create a complete member identity with a profile, wallet, and unique referral code. The password is never stored in the application database or audit log." : "Create an Admin or Staff Firebase sign-in with the secure password you set. The password is never stored in the application database or audit log."}</DialogDescription></DialogHeader>
+      <div className="grid gap-4">{creatingMember ? <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="member-first-name">First name</label><Input id="member-first-name" className="mt-2" value={draft.firstName} onChange={(event) => setDraft((current) => ({ ...current, firstName: event.target.value }))} /></div><div><label className="text-sm font-medium" htmlFor="member-last-name">Last name</label><Input id="member-last-name" className="mt-2" value={draft.lastName} onChange={(event) => setDraft((current) => ({ ...current, lastName: event.target.value }))} /></div></div> : <div><label className="text-sm font-medium" htmlFor="staff-name">Name</label><Input id="staff-name" className="mt-2" value={draft.name} disabled={Boolean(editing && !data.capabilities.canEdit)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></div>}
       {!editing ? <div><label className="text-sm font-medium" htmlFor="staff-email">Email</label><Input id="staff-email" className="mt-2" type="email" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></div> : <div><p className="text-sm font-medium">Email</p><p className="mt-2 text-sm text-muted-foreground">{draft.email}</p></div>}
       {!editing ? <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="staff-password">Temporary password</label><div className="mt-2"><PasswordInput id="staff-password" autoComplete="new-password" value={draft.password} onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))} /></div><p className="mt-1 text-xs text-muted-foreground">At least 12 characters with uppercase, lowercase, and a number.</p></div><div><label className="text-sm font-medium" htmlFor="staff-confirm-password">Confirm password</label><div className="mt-2"><PasswordInput id="staff-confirm-password" autoComplete="new-password" value={draft.confirmPassword} onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></div></div></div> : null}
       <div><label className="text-sm font-medium" htmlFor="staff-role">Role</label>{data.capabilities.canAssignRoles && (!editing || data.capabilities.canEdit) ? <select id="staff-role" value={draft.roleId} onChange={(event) => setDraft((current) => ({ ...current, roleId: event.target.value }))} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">{data.assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name} · {role.baseRole}</option>)}</select> : <p className="mt-2 text-sm text-muted-foreground">{editing?.roles.map((role) => role.name).join(", ") ?? "No assignable role"}</p>}</div>
+      {creatingMember ? <div><label className="text-sm font-medium" htmlFor="member-sponsor">Sponsor referral code <span className="font-normal text-muted-foreground">(optional)</span></label><Input id="member-sponsor" className="mt-2 uppercase" value={draft.sponsorReferralCode} onChange={(event) => setDraft((current) => ({ ...current, sponsorReferralCode: event.target.value }))} /></div> : null}
       <div><label className="text-sm font-medium" htmlFor="staff-status">Account status</label><select id="staff-status" value={draft.status} disabled={Boolean(editing && !data.capabilities.canEdit && !data.capabilities.canDisable)} onChange={(event) => { setDraft((current) => ({ ...current, status: event.target.value as Status })); setDisableConfirmed(false); }} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">{statusOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
       {draft.status === "DISABLED" ? <label className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"><input className="mt-1" type="checkbox" checked={disableConfirmed} onChange={(event) => setDisableConfirmed(event.target.checked)} /><span><ShieldAlert className="mr-1 inline size-4 text-destructive" />I understand this blocks application access and disables Firebase sign-in for this account.</span></label> : null}</div>
-      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDialogOpen(false)}>Cancel</Button><Button disabled={saving || (!editing && (!draft.name.trim() || !draft.email.trim() || !draft.password || !draft.confirmPassword || !draft.roleId))} onClick={() => void save()}>{saving ? "Saving…" : <><Check className="size-4" />Save account</>}</Button></DialogFooter>
+      <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDialogOpen(false)}>Cancel</Button><Button disabled={saving || (!editing && (!(creatingMember ? draft.firstName.trim() && draft.lastName.trim() : draft.name.trim()) || !draft.email.trim() || !draft.password || !draft.confirmPassword || !draft.roleId))} onClick={() => void save()}>{saving ? "Saving…" : <><Check className="size-4" />{creatingMember ? "Save member" : "Save account"}</>}</Button></DialogFooter>
     </DialogContent></Dialog>
   </>;
 }

@@ -13,6 +13,8 @@ import {
   canApplyStaffStatus,
   canAssignStaffRole,
   canAssignStaffRoles,
+  canAssignMemberRole,
+  canCreateMember,
   canCreateStaff,
   canEditStaff,
   canManageStaffTarget,
@@ -57,13 +59,16 @@ function assertTargetIsStaff(targetRoles: readonly Pick<AssignableStaffRole, "ba
 
 export class StaffService {
   static async listAssignableRoles(actor: AuthContext) {
-    if (!canCreateStaff(actor) && !(canEditStaff(actor) && canAssignStaffRoles(actor))) return [];
+    if (!canCreateStaff(actor) && !canCreateMember(actor) && !(canEditStaff(actor) && canAssignStaffRoles(actor))) return [];
     await connectToDatabase();
-    const roles = await Role.find({ isActive: true, baseRole: { $in: ["ADMIN", "STAFF"] } })
+    const roles = await Role.find({ isActive: true, baseRole: { $in: ["ADMIN", "STAFF", "MEMBER"] } })
       .select("name slug baseRole permissions isActive")
       .sort({ name: 1 })
       .lean();
-    return roles.filter((role) => canAssignStaffRole(actor, role as AssignableStaffRole));
+    return roles.filter((role) => {
+      const assignable = role as AssignableStaffRole;
+      return assignable.baseRole === "MEMBER" ? canAssignMemberRole(actor, assignable) : canAssignStaffRole(actor, assignable);
+    });
   }
 
   static async create(input: CreateStaffInput, actor: AuthContext, audit: StaffAuditInput) {
@@ -79,6 +84,7 @@ export class StaffService {
         email: input.email,
         password: input.password,
         displayName: input.name,
+        emailVerified: input.status === "ACTIVE",
         disabled: input.status === "DISABLED",
       });
       firebaseUid = firebaseUser.uid;

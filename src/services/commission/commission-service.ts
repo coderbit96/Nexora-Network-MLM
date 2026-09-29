@@ -11,7 +11,10 @@ import { SystemSettingsService } from "@/services/settings/system-settings-servi
 
 export type CommissionProcessResult = { orderId: string; processed: boolean; reason?: "NOT_ELIGIBLE" | "ALREADY_PROCESSED" | "IN_PROGRESS"; commissionsCreated: number; amountMinor: bigint };
 
-function isEligibleOrder(order: { status: string; paidAt?: Date }) { return order.status === "PAID" && Boolean(order.paidAt); }
+/** A fulfilled order remains eligible after its payment was verified. Refunded/cancelled orders never do. */
+function isEligibleOrder(order: { status: string; paidAt?: Date }) {
+  return ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status) && Boolean(order.paidAt);
+}
 function ruleSnapshot(rule: { _id: Types.ObjectId; commissionType: CommissionRuleSnapshot["commissionType"]; level?: number; calculationBasis: CommissionRuleSnapshot["calculationBasis"]; rewardType: CommissionRuleSnapshot["rewardType"]; rateBasisPoints?: number; fixedAmountMinor?: bigint; active: boolean; effectiveFrom: Date; effectiveTo?: Date }): CommissionRuleSnapshot { return { id: String(rule._id), commissionType: rule.commissionType, ...(rule.level ? { level: rule.level } : {}), calculationBasis: rule.calculationBasis, rewardType: rule.rewardType, ...(rule.rateBasisPoints ? { rateBasisPoints: rule.rateBasisPoints } : {}), ...(rule.fixedAmountMinor != null ? { fixedAmountMinor: rule.fixedAmountMinor } : {}), active: rule.active, effectiveFrom: rule.effectiveFrom, ...(rule.effectiveTo ? { effectiveTo: rule.effectiveTo } : {}) }; }
 
 async function creditCommission(plan: PlannedCommission, session: ClientSession) {
@@ -37,7 +40,7 @@ export class CommissionService {
       const order = await Order.findById(orderId).session(session);
       if (!order || !isEligibleOrder(order)) { result = { ...result, reason: "NOT_ELIGIBLE" }; return; }
       if (order.commissionStatus !== "PENDING") { result = { ...result, reason: order.commissionStatus === "PROCESSING" ? "IN_PROGRESS" : "ALREADY_PROCESSED" }; return; }
-      const claimed = await Order.findOneAndUpdate({ _id: order._id, commissionStatus: "PENDING" }, { $set: { commissionStatus: "PROCESSING" } }, { new: true, session });
+      const claimed = await Order.findOneAndUpdate({ _id: order._id, commissionStatus: "PENDING" }, { $set: { commissionStatus: "PROCESSING" } }, { returnDocument: "after", session });
       if (!claimed) { result = { ...result, reason: "IN_PROGRESS" }; return; }
       const configuration = await SystemSettingsService.read(session);
       const minimumEligibleOrderMinor = BigInt(configuration.settings.commission.minimumEligibleOrderMinor);

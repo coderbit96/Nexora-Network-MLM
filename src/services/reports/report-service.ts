@@ -4,8 +4,8 @@ import { errors } from "@/lib/errors/app-error";
 import { CommissionTransaction, MemberProfile, Order, SponsorRelationship, WalletTransaction, Withdrawal } from "@/models";
 import { MAX_INTERACTIVE_PAGE } from "@/config/pagination";
 
-export const REPORT_NAMES = ["members", "referrals", "commissions", "wallet-transactions", "withdrawals", "sales", "orders"] as const;
-export type ReportName = (typeof REPORT_NAMES)[number];
+import type { ReportName } from "@/config/report-permissions";
+export { REPORT_NAMES, type ReportName } from "@/config/report-permissions";
 
 export type ReportFilters = { page: number; limit: number; from?: Date; toExclusive?: Date; memberNumber?: string; status?: string };
 export type ReportPage = { items: Array<Record<string, string | number | null>>; pagination: { total: number; page: number; limit: number; totalPages: number } };
@@ -110,7 +110,12 @@ const CSV_COLUMNS: Record<ReportName, string[]> = {
   orders: ["orderNumber", "memberNumber", "member", "totalMinor", "currency", "orderStatus", "paymentStatus", "commissionStatus", "createdAt", "paidAt"],
 };
 
-function csvCell(value: string | number | null | undefined) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+export function csvCell(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+  // Quoting does not stop spreadsheet formula execution for user-entered text.
+  const safe = /^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
 
 /** Streams page-sized result sets so an export never accumulates an unbounded report in browser or server memory. */
 export function createReportCsvStream(name: ReportName, filters: ReportFilters) {

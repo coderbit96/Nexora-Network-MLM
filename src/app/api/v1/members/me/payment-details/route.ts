@@ -18,6 +18,6 @@ export const PUT = withApiErrorHandling(async (request: Request) => {
   enforceRateLimit(`payment-details:${context.userId}:${request.headers.get("x-forwarded-for") ?? "unknown"}`, 10, 60_000);
   const input = await parseJsonBody(request, paymentDetailsSchema);
   const profile = await getMemberProfileByUserId(context.user._id);
-  await MemberPaymentDetails.findOneAndUpdate({ memberProfileId: profile._id }, { $set: { accountHolderNameEncrypted: encryptSensitiveField(input.accountHolderName), bankNameEncrypted: encryptSensitiveField(input.bankName), accountNumberEncrypted: encryptSensitiveField(input.accountNumber), ifscCodeEncrypted: encryptSensitiveField(input.ifscCode), accountLast4: input.accountNumber.slice(-4) } }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+  await MemberPaymentDetails.findOneAndUpdate({ memberProfileId: profile._id }, { $set: { accountHolderNameEncrypted: encryptSensitiveField(input.accountHolderName), bankNameEncrypted: encryptSensitiveField(input.bankName), accountNumberEncrypted: encryptSensitiveField(input.accountNumber), ifscCodeEncrypted: encryptSensitiveField(input.ifscCode), accountLast4: input.accountNumber.slice(-4) } }, { upsert: true, returnDocument: "after", runValidators: true, setDefaultsOnInsert: true });
   return apiSuccess(await getMaskedPaymentDetails(profile._id));
 });

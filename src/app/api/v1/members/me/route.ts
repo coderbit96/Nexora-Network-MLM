@@ -17,7 +17,7 @@ export const PATCH = withApiErrorHandling(async (request: Request) => {
   const context = await requireAuth(request);
   enforceRateLimit(`member-profile:${context.userId}:${request.headers.get("x-forwarded-for") ?? "unknown"}`, 20, 60_000);
   const input = await parseJsonBody(request, updateMemberProfileSchema);
-  const profile = await MemberProfile.findOneAndUpdate({ userId: context.user._id }, { $set: { firstName: input.firstName, lastName: input.lastName, phone: input.phone || undefined, alternatePhone: input.alternatePhone || undefined, address: input.address ?? undefined } }, { new: true, runValidators: true });
+  const profile = await MemberProfile.findOneAndUpdate({ userId: context.user._id }, { $set: { firstName: input.firstName, lastName: input.lastName, phone: input.phone || undefined, alternatePhone: input.alternatePhone || undefined, address: input.address ?? undefined } }, { returnDocument: "after", runValidators: true });
   if (!profile) throw new Error("Member profile was not found.");
   await User.updateOne({ _id: context.user._id }, { $set: { displayName: `${input.firstName} ${input.lastName}`.trim() } });
   return apiSuccess({ profile });

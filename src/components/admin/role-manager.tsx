@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { canManageRoleDefinition } from "@/services/auth/role-authorization";
+import type { AuthorizationSnapshot } from "@/lib/auth/policy";
 import { PERMISSION_CATALOG, type PermissionKey, type PermissionMetadata } from "@/config/permissions";
 
 type Role = { id: string; name: string; slug: string; description: string; baseRole: "SUPER_ADMIN" | "ADMIN" | "STAFF" | "MEMBER"; permissions: PermissionKey[]; isSystem: boolean; isActive: boolean };
@@ -28,7 +30,7 @@ const baseHelp: Record<Role["baseRole"], string> = {
 function errorMessage(value: { error?: { message?: string } }) { return value.error?.message ?? "The role could not be saved. Please try again."; }
 function slugFromName(name: string) { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100); }
 
-export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStatus }: { canCreate: boolean; canEdit: boolean; canDelete: boolean; canManageSystemStatus: boolean }) {
+export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStatus, actor }: { actor: AuthorizationSnapshot; canCreate: boolean; canEdit: boolean; canDelete: boolean; canManageSystemStatus: boolean }) {
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,9 +44,9 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
 
   const groups = useMemo(() => {
     const results = new Map<string, PermissionMetadata[]>();
-    for (const item of PERMISSION_CATALOG) results.set(item.category, [...(results.get(item.category) ?? []), item]);
+    for (const item of PERMISSION_CATALOG.filter((permission) => actor.roles.includes("SUPER_ADMIN") || actor.permissions.includes(permission.key))) results.set(item.category, [...(results.get(item.category) ?? []), item]);
     return [...results.entries()];
-  }, []);
+  }, [actor]);
   const visibleGroups = useMemo(() => {
     const term = permissionSearch.trim().toLowerCase();
     if (!term) return groups;
@@ -105,7 +107,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
   if (!roles && !failed) return <Skeleton className="h-96" />;
   if (failed || !roles) return <ErrorState title="Roles could not be loaded" />;
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => draft.permissions.includes(key));
-  const canChangeStatus = (role: Role) => canEdit && (!role.isSystem || (canManageSystemStatus && role.baseRole !== "SUPER_ADMIN"));
+  const canChangeStatus = (role: Role) => canEdit && canManageRoleDefinition(actor, role) && (!role.isSystem || (canManageSystemStatus && role.baseRole !== "SUPER_ADMIN"));
 
   return <>
     <Card>
@@ -114,7 +116,7 @@ export function RoleManager({ canCreate, canEdit, canDelete, canManageSystemStat
         {canCreate ? <Button onClick={openCreate}><Plus className="size-4" />Create role</Button> : null}
       </CardHeader>
       <CardContent>
-        {roles.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Workspace</TableHead><TableHead>Functions</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{roles.map((role) => <TableRow key={role.id}><TableCell><p className="font-medium">{role.name}</p><p className="text-xs text-muted-foreground">{role.slug}</p></TableCell><TableCell><Badge variant={role.isSystem ? "warning" : "secondary"}>{role.baseRole}</Badge></TableCell><TableCell className="text-sm text-muted-foreground">{role.baseRole === "SUPER_ADMIN" ? "Implicit unrestricted access" : role.permissions.length + " selected"}</TableCell><TableCell><Badge variant={role.isActive ? "success" : "secondary"}>{role.isActive ? "ACTIVE" : "INACTIVE"}</Badge></TableCell><TableCell><div className="flex justify-end gap-2">{canEdit ? <Button variant="outline" size="sm" onClick={() => openEdit(role)}><Pencil className="size-4" />Edit</Button> : null}{canChangeStatus(role) ? <Button variant="outline" size="sm" onClick={() => setChangingStatus(role)}><Power className="size-4" />{role.isActive ? "Deactivate" : "Activate"}</Button> : null}{canDelete && !role.isSystem ? <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleting(role)}><Trash2 className="size-4" />Delete</Button> : null}</div></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyState title="No roles found" description="Create a custom role to delegate scoped administrative access." />}
+        {roles.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Workspace</TableHead><TableHead>Functions</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader><TableBody>{roles.map((role) => <TableRow key={role.id}><TableCell><p className="font-medium">{role.name}</p><p className="text-xs text-muted-foreground">{role.slug}</p></TableCell><TableCell><Badge variant={role.isSystem ? "warning" : "secondary"}>{role.baseRole}</Badge></TableCell><TableCell className="text-sm text-muted-foreground">{role.baseRole === "SUPER_ADMIN" ? "Implicit unrestricted access" : role.permissions.length + " selected"}</TableCell><TableCell><Badge variant={role.isActive ? "success" : "secondary"}>{role.isActive ? "ACTIVE" : "INACTIVE"}</Badge></TableCell><TableCell><div className="flex justify-end gap-2">{canEdit && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" onClick={() => openEdit(role)}><Pencil className="size-4" />Edit</Button> : null}{canChangeStatus(role) ? <Button variant="outline" size="sm" onClick={() => setChangingStatus(role)}><Power className="size-4" />{role.isActive ? "Deactivate" : "Activate"}</Button> : null}{canDelete && !role.isSystem && canManageRoleDefinition(actor, role) ? <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleting(role)}><Trash2 className="size-4" />Delete</Button> : null}</div></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyState title="No roles found" description="Create a custom role to delegate scoped administrative access." />}
       </CardContent>
     </Card>
 

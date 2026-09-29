@@ -25,8 +25,20 @@ export function canAssignStaffRole(actor: AuthorizationSnapshot, role: Assignabl
   return role.baseRole === "STAFF" && role.permissions.every((permission) => hasPermission(actor, permission));
 }
 
+/** Member provisioning is a separate workflow because it creates a profile, wallet, and referral identity. */
+export function canAssignMemberRole(actor: AuthorizationSnapshot, role: AssignableStaffRole) {
+  if (!role.isActive || role.baseRole !== "MEMBER") return false;
+  if (!hasPermission(actor, PERMISSION.MEMBERS.CREATE) || !hasPermission(actor, PERMISSION.ROLES.ASSIGN)) return false;
+  return isExplicitSuperAdmin(actor) || role.permissions.every((permission) => hasPermission(actor, permission));
+}
+
 export function canCreateStaff(actor: AuthorizationSnapshot) {
   return hasPermission(actor, PERMISSION.STAFF.CREATE)
+    && hasPermission(actor, PERMISSION.ROLES.ASSIGN);
+}
+
+export function canCreateMember(actor: AuthorizationSnapshot) {
+  return hasPermission(actor, PERMISSION.MEMBERS.CREATE)
     && hasPermission(actor, PERMISSION.ROLES.ASSIGN);
 }
 

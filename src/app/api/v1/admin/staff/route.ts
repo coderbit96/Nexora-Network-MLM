@@ -8,8 +8,9 @@ import { createStaffSchema } from "@/lib/validation/staff";
 import { parseJsonBody } from "@/lib/validation/request";
 import { Role, User } from "@/models";
 import { getAuditRequestContext } from "@/services/audit/audit-service";
-import { canCreateStaff, canDisableStaff, canEditStaff, canManageStaffTarget } from "@/services/auth/staff-authorization";
+import { canCreateMember, canCreateStaff, canDisableStaff, canEditStaff, canManageStaffTarget } from "@/services/auth/staff-authorization";
 import { StaffService } from "@/services/auth/staff-service";
+import { MemberAccountService } from "@/services/members/member-account-service";
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -54,6 +55,7 @@ export const GET = withApiErrorHandling(async (request: Request) => {
     pagination: { total, page: input.page, limit: input.limit, totalPages: Math.max(1, Math.ceil(total / input.limit)) },
     capabilities: {
       canCreate: canCreateStaff(context),
+      canCreateMember: canCreateMember(context),
       canEdit: canEditStaff(context),
       canDisable: canDisableStaff(context),
       canAssignRoles: hasPermission(context, PERMISSION.ROLES.ASSIGN),
@@ -66,6 +68,10 @@ export const POST = withApiErrorHandling(async (request: Request) => {
   const context = await requireAuth(request);
   enforceRateLimit(`admin-staff-create:${context.userId}`, 10, 60_000);
   const input = await parseJsonBody(request, createStaffSchema);
-  const result = await StaffService.create(input, context, { actorUserId: context.user._id, ...getAuditRequestContext(request) });
-  return apiSuccess(result, { status: 201 });
+  const role = await Role.findById(input.roleId).select("baseRole").lean();
+  const audit = { actorUserId: context.user._id, ...getAuditRequestContext(request) };
+  const result = role?.baseRole === "MEMBER"
+    ? await MemberAccountService.create(input, context, audit)
+    : await StaffService.create(input, context, audit);
+  return apiSuccess({ ...result, accountType: role?.baseRole === "MEMBER" ? "MEMBER" : "TEAM" }, { status: 201 });
 });

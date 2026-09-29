@@ -8,6 +8,13 @@ import { resolveValidUpline } from "@/services/genealogy/sponsor-assignment";
 import { OrderService } from "@/services/orders/order-service";
 import { PaymentService } from "@/services/payments/payment-service";
 import { WithdrawalService } from "@/services/withdrawal/withdrawal-service";
+import { SystemSettingsService } from "@/services/settings/system-settings-service";
+import { defaultBusinessSettings } from "@/lib/validation/settings";
+import { ensureSystemRbac } from "@/services/auth/rbac";
+import { RoleService } from "@/services/auth/role-service";
+import { PERMISSION } from "@/config/permissions";
+import { CommissionService } from "@/services/commission/commission-service";
+import { WalletService } from "@/services/wallet/wallet-service";
 
 const testUri = process.env.MLM_TEST_MONGODB_URI;
 const testDatabase = process.env.MLM_TEST_MONGODB_DB_NAME;
@@ -65,6 +72,18 @@ test("database E2E: referral registration, verified payment, commissions, and wi
   try {
     const [adminRole, memberRole] = await Role.create([{ name: "SUPER_ADMIN", slug: "super-admin", baseRole: "SUPER_ADMIN", description: "Integration test administrator", isSystem: true, isActive: true, permissions: [] }, { name: "MEMBER", slug: "member", baseRole: "MEMBER", description: "Integration test member", isSystem: true, isActive: true, permissions: [] }]);
     const admin = await User.create({ firebaseUid: "e2e-admin", email: "admin@example.test", displayName: "Integration Admin", status: "ACTIVE", roleIds: [adminRole._id] });
+    // Test policy is explicit; production's default minimum remains unchanged.
+    await SystemSettingsService.update({ actorUserId: admin._id, settings: { ...defaultBusinessSettings, withdrawal: { ...defaultBusinessSettings.withdrawal, minimumMinor: "1000" } } });
+    await ensureSystemRbac();
+    const staffRole = await Role.findOne({ name: "STAFF" });
+    assert.ok(staffRole);
+    staffRole.permissions = [PERMISSION.MEMBERS.VIEW];
+    await staffRole.save();
+    await ensureSystemRbac();
+    assert.deepEqual((await Role.findById(staffRole._id).lean())?.permissions, [PERMISSION.MEMBERS.VIEW], "registration must preserve revoked grants");
+    await assert.rejects(RoleService.update(String(staffRole._id), { permissions: [PERMISSION.WALLET.ADJUST] }, {
+      actorUserId: admin._id, actor: { status: "ACTIVE", roles: ["STAFF"], permissions: [PERMISSION.ROLES.EDIT] },
+    }), /access|permission|forbidden/i);
 
     // Member A exists; B and C are created using the persisted referral codes of their sponsors.
     const memberA = await createMember({ sequence: 1, roleId: memberRole._id });
@@ -145,6 +164,27 @@ test("database E2E: referral registration, verified payment, commissions, and wi
     assert.equal(finalWalletB?.heldMinor, 0n);
     assert.equal(finalWalletB?.lifetimeWithdrawalsMinor, 1_000n);
     assert.equal(await WalletTransaction.countDocuments({ memberProfileId: memberB.profileId }), 4);
+    // Replaying payment/commission processing must leave all entitlements unchanged.
+    await Promise.all([
+      PaymentService.simulateMockSuccess(memberC.profileId, String(payment._id)),
+      CommissionService.processEligibleOrder(checkout.orderId),
+      CommissionService.processEligibleOrder(checkout.orderId),
+    ]);
+    assert.equal(await CommissionTransaction.countDocuments({ sourceOrderId: checkout.orderId }), 3);
+    assert.equal((await Wallet.findOne({ memberProfileId: memberB.profileId }).lean())?.availableMinor, 500n);
+    // Actual concurrent database writes, not just arithmetic simulations.
+    const posting = { memberProfileId: memberB.profileId, currency: "INR", type: "ADMIN_CREDIT" as const, direction: "CREDIT" as const, amountMinor: 37n, referenceType: "TEST", referenceId: "credit", description: "Isolated concurrency test" };
+    await Promise.all([WalletService.post({ ...posting, idempotencyKey: "race-credit-a" }), WalletService.post({ ...posting, idempotencyKey: "race-credit-b" })]);
+    assert.equal((await Wallet.findOne({ memberProfileId: memberB.profileId }).lean())?.availableMinor, 574n);
+    await assert.rejects(
+      WalletService.post({ ...posting, amountMinor: 38n, idempotencyKey: "race-credit-a" }),
+      /already been used for a different wallet operation/i,
+      "a retry key must never authorize a different financial posting",
+    );
+    assert.equal((await Wallet.findOne({ memberProfileId: memberB.profileId }).lean())?.availableMinor, 574n);
+    const exactAmount = 9_007_199_254_740_993n;
+    await WalletService.post({ ...posting, memberProfileId: memberA.profileId, amountMinor: exactAmount, idempotencyKey: "precision-credit" });
+    assert.equal((await Wallet.findOne({ memberProfileId: memberA.profileId }).lean())?.availableMinor, exactAmount + 200n);
   } finally {
     // The explicit database-name guard above makes this cleanup safe and leaves no test financial data behind.
     await database.dropDatabase();

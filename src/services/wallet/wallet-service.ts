@@ -49,6 +49,16 @@ function isDuplicateKeyError(error: unknown): error is { code: number } {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === 11000;
 }
 
+function assertSamePosting(existing: Pick<WalletPostingInput, "memberProfileId" | "currency" | "type" | "direction" | "amountMinor" | "referenceType" | "referenceId">, input: WalletPostingInput) {
+  if (String(existing.memberProfileId) !== String(input.memberProfileId)
+    || existing.currency !== normalizeCurrency(input.currency)
+    || existing.type !== input.type || existing.direction !== input.direction
+    || existing.amountMinor !== input.amountMinor
+    || existing.referenceType !== input.referenceType || existing.referenceId !== input.referenceId) {
+    throw errors.conflict("This request reference has already been used for a different wallet operation.");
+  }
+}
+
 export class WalletService {
   /** Posts an immutable ledger entry and its wallet-summary mutation in the provided database transaction. */
   static async postInTransaction(input: WalletPostingInput, session: ClientSession): Promise<WalletPostingResult> {
@@ -57,6 +67,7 @@ export class WalletService {
 
     const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).session(session).lean();
     if (existing) {
+      assertSamePosting(existing, input);
       const existingWallet = await Wallet.findById(existing.walletId).session(session).lean();
       if (!existingWallet) throw new Error("Wallet transaction references a missing wallet.");
       return {
@@ -115,6 +126,7 @@ export class WalletService {
       const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).lean();
       const wallet = existing ? await Wallet.findById(existing.walletId).lean() : null;
       if (!existing || !wallet) throw error;
+      assertSamePosting(existing, input);
       return { created: false, wallet: { id: String(wallet._id), memberProfileId: String(wallet.memberProfileId), currency: wallet.currency, ...toBalances(wallet) }, transaction: { id: String(existing._id), resultingAvailableMinor: existing.resultingAvailableMinor, resultingHeldMinor: existing.resultingHeldMinor } };
     } finally { await session.endSession(); }
   }
@@ -153,6 +165,7 @@ export class WalletService {
       const existing = await WalletTransaction.findOne({ idempotencyKey: input.idempotencyKey }).lean();
       const wallet = existing ? await Wallet.findById(existing.walletId).lean() : null;
       if (!existing || !wallet) throw error;
+      assertSamePosting(existing, { ...input, type: input.direction === "CREDIT" ? "ADMIN_CREDIT" : "ADMIN_DEBIT", referenceType: "ADMIN_ADJUSTMENT", referenceId: input.idempotencyKey, description: reason });
       return { created: false, wallet: { id: String(wallet._id), memberProfileId: String(wallet.memberProfileId), currency: wallet.currency, ...toBalances(wallet) }, transaction: { id: String(existing._id), resultingAvailableMinor: existing.resultingAvailableMinor, resultingHeldMinor: existing.resultingHeldMinor } };
     } finally { await session.endSession(); }
   }

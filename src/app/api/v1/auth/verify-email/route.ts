@@ -17,7 +17,7 @@ export const POST = withApiErrorHandling(async (request: Request) => {
   const session = await startSession();
   try {
     await session.withTransaction(async () => {
-      const user = await User.findOneAndUpdate({ firebaseUid: token.uid, status: "PENDING" }, { $set: { status: "ACTIVE" } }, { new: true, session });
+      const user = await User.findOneAndUpdate({ firebaseUid: token.uid, status: "PENDING" }, { $set: { status: "ACTIVE" } }, { returnDocument: "after", session });
       if (!user) {
         const existing = await User.exists({ firebaseUid: token.uid }).session(session);
         if (!existing) throw errors.unauthorized("Your application account has not been initialized.");

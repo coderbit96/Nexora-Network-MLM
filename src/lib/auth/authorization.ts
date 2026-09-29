@@ -41,12 +41,15 @@ export async function getAuthContext(request?: Request) {
   if (request?.headers.get("authorization")) return resolveApplicationUser(await verifyFirebaseIdToken(request));
   const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) throw errors.unauthorized();
-  try { return await resolveApplicationUser(await getFirebaseAdminAuth().verifySessionCookie(sessionCookie, true)); }
+  let firebase: DecodedIdToken;
+  try { firebase = await getFirebaseAdminAuth().verifySessionCookie(sessionCookie, true); }
   catch (error) {
     // Surface configuration failures as 5xx rather than falsely treating every user as unauthorized.
     if (error instanceof Error && error.name === "ZodError") throw error;
     throw errors.unauthorized("Your session is invalid or has expired.");
   }
+  // Database failures are server failures, not invalid login sessions.
+  return resolveApplicationUser(firebase);
 }
 
 export async function requireAuth(request?: Request) {

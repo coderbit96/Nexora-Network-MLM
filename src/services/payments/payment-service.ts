@@ -42,7 +42,7 @@ export class PaymentService {
       _id: payment._id,
       providerTransactionId: { $exists: false },
       status: { $in: ["CREATED", "FAILED"] },
-    }, { $set: { status: "PENDING" } }, { new: true, runValidators: true }).lean();
+    }, { $set: { status: "PENDING" } }, { returnDocument: "after", runValidators: true }).lean();
     if (!claimed) throw errors.conflict("Payment initialization is already in progress. Please try again shortly.");
 
     const provider = getPaymentProvider(claimed.provider);
