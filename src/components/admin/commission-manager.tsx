@@ -2,6 +2,7 @@
 
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { DateRangeFilter } from "@/components/admin/date-range-filter";
@@ -25,9 +26,11 @@ const blank = (): Form => ({ name: "", commissionType: "DIRECT", level: "", calc
 async function get<T>(url: string) { const response = await fetch(url, { cache: "no-store" }); const body = await response.json() as { success?: boolean; data?: T; error?: { message?: string } }; if (!response.ok || !body.success || !body.data) throw new Error(body.error?.message ?? "Request failed."); return body.data; }
 
 export function CommissionManager() {
+  const searchParams = useSearchParams();
+  const initialMember = searchParams.get("member")?.trim().slice(0, 100) ?? "";
   const [tab, setTab] = useState<"Overview" | "Commission Rules" | "Commission Transactions">("Overview"); const [overview, setOverview] = useState<Overview | null>(null); const [rules, setRules] = useState<Rule[] | null>(null); const [transactions, setTransactions] = useState<Transaction[] | null>(null); const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 }); const [failed, setFailed] = useState(false);
   const [dialog, setDialog] = useState<Rule | "create" | null>(null); const [form, setForm] = useState<Form>(blank()); const [saving, setSaving] = useState(false); const [notice, setNotice] = useState<string | null>(null);
-  const [member, setMember] = useState(""); const [appliedMember, setAppliedMember] = useState(""); const [type, setType] = useState(""); const [status, setStatus] = useState(""); const [level, setLevel] = useState(""); const [reference, setReference] = useState(""); const [appliedReference, setAppliedReference] = useState(""); const [range, setRange] = useState({ from: "", to: "" }); const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
+  const [member, setMember] = useState(initialMember); const [appliedMember, setAppliedMember] = useState(initialMember); const [type, setType] = useState(""); const [status, setStatus] = useState(""); const [level, setLevel] = useState(""); const [reference, setReference] = useState(""); const [appliedReference, setAppliedReference] = useState(""); const [range, setRange] = useState({ from: "", to: "" }); const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
   const transactionQuery = useMemo(() => new URLSearchParams({ view: "transactions", page: String(pagination.page), limit: String(pagination.limit), ...(appliedMember ? { member: appliedMember } : {}), ...(type ? { type } : {}), ...(status ? { status } : {}), ...(level ? { level } : {}), ...(appliedReference ? { reference: appliedReference } : {}), ...(appliedRange.from ? { from: appliedRange.from } : {}), ...(appliedRange.to ? { to: appliedRange.to } : {}) }).toString(), [pagination.page, pagination.limit, appliedMember, type, status, level, appliedReference, appliedRange]);
   const load = useCallback(async () => { try { if (tab === "Overview") setOverview(await get<Overview>("/api/v1/admin/commissions?view=overview")); if (tab === "Commission Rules") setRules((await get<{ rules: Rule[] }>("/api/v1/admin/commissions?view=rules")).rules); if (tab === "Commission Transactions") { const data = await get<{ items: Transaction[]; pagination: typeof pagination }>(`/api/v1/admin/commissions?${transactionQuery}`); setTransactions(data.items); setPagination(data.pagination); } setFailed(false); } catch { setFailed(true); } }, [tab, transactionQuery]);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);

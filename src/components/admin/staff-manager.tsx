@@ -47,6 +47,7 @@ export function StaffManager() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saving, setSaving] = useState(false);
   const [disableConfirmed, setDisableConfirmed] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const query = useMemo(() => new URLSearchParams({ page: String(page), limit: "20", ...(querySearch ? { q: querySearch } : {}), ...(statusFilter ? { status: statusFilter } : {}) }).toString(), [page, querySearch, statusFilter]);
   const load = useCallback(async () => {
@@ -72,6 +73,7 @@ export function StaffManager() {
     setEditing(null);
     setDraft({ ...emptyDraft, roleId: firstRole?.id ?? "" });
     setDisableConfirmed(false);
+    setEmailError(null);
     setDialogOpen(true);
   }
 
@@ -79,6 +81,7 @@ export function StaffManager() {
     setEditing(staff);
     setDraft({ ...emptyDraft, name: staff.name, email: staff.email, password: "", confirmPassword: "", roleId: staff.roles[0]?.id ?? "", status: staff.status });
     setDisableConfirmed(false);
+    setEmailError(null);
     setDialogOpen(true);
   }
 
@@ -117,6 +120,7 @@ export function StaffManager() {
       setDialogOpen(false);
       return;
     }
+    setEmailError(null);
     setSaving(true);
     try {
       const response = await fetch(editing ? `/api/v1/admin/staff/${editing.id}` : "/api/v1/admin/staff", {
@@ -130,7 +134,11 @@ export function StaffManager() {
       setDialogOpen(false);
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "The staff account could not be saved.");
+      const message = error instanceof Error ? error.message : "The staff account could not be saved.";
+      if (!editing && /already exists for this email address/i.test(message)) {
+        setEmailError("This email already has an account. Use the relevant Team accounts or Members page to update it instead of creating another one.");
+      }
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -163,7 +171,7 @@ export function StaffManager() {
 
     <Dialog open={dialogOpen} onOpenChange={(open) => !saving && setDialogOpen(open)}><DialogContent><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : creatingMember ? "Add member account" : "Add team account"}</DialogTitle><DialogDescription>{editing ? "Role and account-state changes are audited. You cannot edit your own team account here." : creatingMember ? "Create a complete member identity with a profile, wallet, and unique referral code. The password is never stored in the application database or audit log." : "Create an Admin or Staff Firebase sign-in with the secure password you set. The password is never stored in the application database or audit log."}</DialogDescription></DialogHeader>
       <div className="grid gap-4">{creatingMember ? <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="member-first-name">First name</label><Input id="member-first-name" className="mt-2" value={draft.firstName} onChange={(event) => setDraft((current) => ({ ...current, firstName: event.target.value }))} /></div><div><label className="text-sm font-medium" htmlFor="member-last-name">Last name</label><Input id="member-last-name" className="mt-2" value={draft.lastName} onChange={(event) => setDraft((current) => ({ ...current, lastName: event.target.value }))} /></div></div> : <div><label className="text-sm font-medium" htmlFor="staff-name">Name</label><Input id="staff-name" className="mt-2" value={draft.name} disabled={Boolean(editing && !data.capabilities.canEdit)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></div>}
-      {!editing ? <div><label className="text-sm font-medium" htmlFor="staff-email">Email</label><Input id="staff-email" className="mt-2" type="email" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} /></div> : <div><p className="text-sm font-medium">Email</p><p className="mt-2 text-sm text-muted-foreground">{draft.email}</p></div>}
+      {!editing ? <div><label className="text-sm font-medium" htmlFor="staff-email">Email</label><Input id="staff-email" className="mt-2" type="email" aria-invalid={Boolean(emailError)} aria-describedby={emailError ? "staff-email-error" : undefined} value={draft.email} onChange={(event) => { setDraft((current) => ({ ...current, email: event.target.value })); setEmailError(null); }} />{emailError ? <p id="staff-email-error" role="alert" className="mt-2 text-sm text-destructive">{emailError}</p> : null}</div> : <div><p className="text-sm font-medium">Email</p><p className="mt-2 text-sm text-muted-foreground">{draft.email}</p></div>}
       {!editing ? <div className="grid gap-4 sm:grid-cols-2"><div><label className="text-sm font-medium" htmlFor="staff-password">Temporary password</label><div className="mt-2"><PasswordInput id="staff-password" autoComplete="new-password" value={draft.password} onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))} /></div></div><div><label className="text-sm font-medium" htmlFor="staff-confirm-password">Confirm password</label><div className="mt-2"><PasswordInput id="staff-confirm-password" autoComplete="new-password" value={draft.confirmPassword} onChange={(event) => setDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></div></div></div> : null}
       <div><label className="text-sm font-medium" htmlFor="staff-role">Role</label>{data.capabilities.canAssignRoles && (!editing || data.capabilities.canEdit) ? <select id="staff-role" value={draft.roleId} onChange={(event) => setDraft((current) => ({ ...current, roleId: event.target.value }))} className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">{data.assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name} · {role.baseRole}</option>)}</select> : <p className="mt-2 text-sm text-muted-foreground">{editing?.roles.map((role) => role.name).join(", ") ?? "No assignable role"}</p>}</div>
       {creatingMember ? <div><label className="text-sm font-medium" htmlFor="member-sponsor">Sponsor referral code <span className="font-normal text-muted-foreground">(optional)</span></label><Input id="member-sponsor" className="mt-2 uppercase" value={draft.sponsorReferralCode} onChange={(event) => setDraft((current) => ({ ...current, sponsorReferralCode: event.target.value }))} /></div> : null}

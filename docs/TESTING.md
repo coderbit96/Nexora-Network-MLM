@@ -39,7 +39,10 @@ The integration test asserts database state rather than only user-facing message
 4. Process the authoritative payment/business event.
 5. Assert direct/level beneficiaries, commission records, and wallet ledger entries.
 6. Request a withdrawal, then approve, process, and complete it.
-7. Assert reservation, settlement, and historical consistency.
+7. Assert reservation, settlement, and exact wallet/ledger reconciliation.
+8. Assert the Member Detail, Genealogy, Commission History, Wallet, Wallet Ledger, Orders, Payments, Reports, Notifications, Audit Logs, and Dashboard read services all return the same persisted records and totals.
+
+The scenario uses explicit test-only commission values (direct 10%, level 1 5%, level 2 2%) and a test-only product. These values are seeded only inside the disposable integration database; production commission logic continues to read the configured rules from MongoDB.
 
 ## Manual release smoke test
 

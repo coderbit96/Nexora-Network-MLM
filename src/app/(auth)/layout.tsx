@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { Check, ShieldCheck } from "lucide-react";
 
 import { AppLogo } from "@/components/layout/app-logo";
 import { PageTransition } from "@/components/shared/page-transition";
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) { return <main id="main-content" className="grid min-h-screen bg-background lg:grid-cols-2"><section className="grid-noise hidden bg-[#111827] p-12 text-white lg:flex lg:flex-col"><AppLogo /><div className="my-auto max-w-lg"><p className="eyebrow text-[#9eff6b]">Nexora Network</p><h1 className="display-type mt-6 text-6xl font-bold">Your network.<br />On solid ground.</h1><p className="mt-7 max-w-md text-lg leading-8 text-white/60">Secure identity, controlled operations, and a platform that keeps important information clear.</p><div className="mt-12 grid gap-4 border-t border-white/15 pt-6 text-sm"><span className="flex items-center gap-3"><Check className="size-4 text-[#9eff6b]" />Server-verified authentication</span><span className="flex items-center gap-3"><ShieldCheck className="size-4 text-[#9eff6b]" />Role-governed access</span></div></div><p className="text-sm text-white/45">Nexora is built for accountable growth.</p></section><section className="flex items-center justify-center p-5 sm:p-8 lg:p-10"><PageTransition><div className="w-full max-w-md rounded-2xl bg-card/70 sm:p-2"><div className="mb-8 lg:hidden"><AppLogo /></div>{children}</div></PageTransition></section></main>; }

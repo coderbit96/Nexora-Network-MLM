@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -19,6 +20,12 @@ import { Hero } from "@/components/public/hero";
 import { LandingFaq } from "@/components/public/landing-faq";
 import { PageTransition } from "@/components/shared/page-transition";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "Governed network operations",
+  description: "Nexora connects members, commerce, commissions, wallets, and withdrawals in one accountable network platform.",
+  alternates: { canonical: "/" },
+};
 
 const principles = [
   ["01", "See your actual network", "Sponsors, referrals, team growth, and genealogy are modeled as durable relationships—not browser state.", Waypoints],

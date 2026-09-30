@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Check, Network, ShieldCheck, WalletCards } from "lucide-react";
 
-export const metadata: Metadata = { title: "About", description: "Learn how Nexora governs member networks, financial records, and administrative access." };
+export const metadata: Metadata = { title: "About", description: "Learn how Nexora governs member networks, financial records, and administrative access.", alternates: { canonical: "/about" } };
 
 export default function AboutPage() {
   const principles = [["Relationships before reports", "Genealogy and sponsorship are durable server-side relationships, so the numbers have a source.", Network], ["Financial actions leave evidence", "Commissions, wallet entries, and withdrawals use referenced, immutable records rather than editable totals.", WalletCards], ["Authority is verified", "Firebase confirms identity. Nexora resolves account status, roles, and permissions before it authorizes a protected action.", ShieldCheck]] as const;

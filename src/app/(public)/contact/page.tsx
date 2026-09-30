@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SystemSettingsService } from "@/services/settings/system-settings-service";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Contact", description: "Find the configured Nexora support channels." };
+export const metadata: Metadata = { title: "Contact", description: "Find the configured Nexora support channels.", alternates: { canonical: "/contact" } };
 
 export default async function ContactPage() {
   let contact = { email: "", phone: "", whatsapp: "" };

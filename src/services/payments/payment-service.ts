@@ -15,6 +15,9 @@ import type { PaymentStatus } from "@/types/domain";
 function duplicate(error: unknown) { return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === 11000; }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
+/** Never reopen an attempt once an external charge request might have been sent. */
+export function shouldReleasePaymentInitializationClaim(providerRequestStarted: boolean) { return !providerRequestStarted; }
+
 /** Payment provider events may be retried or delivered out of order. Terminal states never reopen. */
 export function canTransitionPayment(from: PaymentStatus, to: PaymentStatus) {
   const transitions: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
@@ -46,7 +49,12 @@ export class PaymentService {
     if (!claimed) throw errors.conflict("Payment initialization is already in progress. Please try again shortly.");
 
     const provider = getPaymentProvider(claimed.provider);
+    let providerRequestStarted = false;
     try {
+      // Once the gateway call begins, the provider may create a charge even if
+      // the response is lost. Never reopen this attempt automatically: doing
+      // so could create a second charge on a member retry.
+      providerRequestStarted = true;
       const result = await provider.createPayment({ paymentId: String(claimed._id), orderId, amountMinor: claimed.amountMinor, currency: claimed.currency, idempotencyKey: claimed.idempotencyKey, returnUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/member/orders/${orderId}` });
       // Initiation is not settlement. Authoritative verification/webhook processing alone may
       // move the payment to SUCCESS, even if a provider returns an optimistic status here.
@@ -55,9 +63,10 @@ export class PaymentService {
       await Order.updateOne({ _id: order._id, paymentStatus: "CREATED" }, { $set: { paymentStatus: "PENDING" } });
       return { paymentId: String(claimed._id), status: "PENDING" as const, provider: claimed.provider, providerTransactionId: result.providerTransactionId, clientAction: result.clientAction, developmentMock: provider.developmentOnly === true };
     } catch (error) {
-      // Only release our own uninitialized claim. A concurrently settled payment must never be
-      // overwritten by an initiation failure.
-      await Payment.updateOne({ _id: claimed._id, status: "PENDING", providerTransactionId: { $exists: false } }, { $set: { status: "FAILED" } });
+      // A pre-provider failure may be retried. After a gateway call begins, keep the
+      // claim pending for operator/provider reconciliation rather than risking a
+      // duplicate external charge.
+      if (shouldReleasePaymentInitializationClaim(providerRequestStarted)) await Payment.updateOne({ _id: claimed._id, status: "PENDING", providerTransactionId: { $exists: false } }, { $set: { status: "FAILED" } });
       throw error;
     }
   }

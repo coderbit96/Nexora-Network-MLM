@@ -38,6 +38,17 @@ export async function publicProductBySlug(slug: string) {
   const product = await Product.findOne({ slug: slug.toLowerCase(), status: "ACTIVE" }).lean(); if (!product) throw errors.notFound("Product was not found."); const category = await Category.findOne({ _id: product.categoryId, status: "ACTIVE" }).select("name slug").lean(); if (!category) throw errors.notFound("Product was not found."); return serializeProduct(product, category);
 }
 
+/** Active public catalogue records only, shaped for sitemap generation. */
+export async function publicProductSitemapEntries() {
+  await connectToDatabase();
+  const activeCategories = await Category.find({ status: "ACTIVE" }).select("_id").lean();
+  if (!activeCategories.length) return [];
+  return Product.find({ status: "ACTIVE", categoryId: { $in: activeCategories.map((category) => category._id) } })
+    .select("slug updatedAt imageUrls")
+    .sort({ updatedAt: -1, _id: -1 })
+    .lean();
+}
+
 export function serializeProduct(product: IProduct & { _id: Types.ObjectId }, category?: { name: string; slug: string } | null) {
   return { id: String(product._id), name: product.name, slug: product.slug, sku: product.sku, shortDescription: product.shortDescription ?? "", description: product.description ?? "", imageUrls: product.imageUrls, priceMinor: product.priceMinor.toString(), ...(product.salePriceMinor != null ? { salePriceMinor: product.salePriceMinor.toString() } : {}), currency: product.currency, pv: product.pv.toString(), bv: product.bv.toString(), stockQuantity: product.stockQuantity, inStock: product.stockQuantity > 0, commissionEligible: product.commissionEligible, featured: product.featured, category: category ? { name: category.name, slug: category.slug } : null, createdAt: product.createdAt.toISOString(), updatedAt: product.updatedAt.toISOString() };
 }

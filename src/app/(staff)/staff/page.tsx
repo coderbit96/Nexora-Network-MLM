@@ -21,7 +21,7 @@ const queueIcons = {
 export default async function StaffDashboardPage() {
   const context = await requireAuth();
   const dashboard = await getStaffDashboard(context);
-  const actions = adminNavigation.filter((item) => item.label !== "Dashboard" && item.href && item.permission && hasPermission(context, item.permission));
+  const actions = adminNavigation.filter((item) => item.label !== "Dashboard" && !item.superAdminOnly && item.href && item.permission && hasPermission(context, item.permission));
 
   return <div className="space-y-6">
     <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.12] via-card to-card p-6 sm:p-8">

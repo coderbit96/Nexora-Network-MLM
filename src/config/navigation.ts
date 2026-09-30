@@ -34,7 +34,6 @@ export const memberNavigation: NavigationItem[] = [
   { label: "Direct Referrals", href: "/member/direct-referrals", icon: Users },
   { label: "Referral link", href: "/member/referral", icon: Users },
   { label: "Genealogy", href: "/member/genealogy", icon: GitBranch },
-  { label: "Earnings", icon: CircleDollarSign, disabled: true, description: "Available after commission processing is introduced." },
   { label: "Wallet", href: "/member/wallet", icon: WalletCards },
   { label: "Withdrawals", href: "/member/withdrawals", icon: BadgeIndianRupee },
   { label: "Products", href: "/member/products", icon: Package },

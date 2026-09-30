@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Eye, Search } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DateRangeFilter } from "@/components/admin/date-range-filter";
@@ -47,7 +48,9 @@ function ledgerQuery(filters: Filters, page: number) {
 }
 
 export function WalletLedgerExplorer() {
-  const [draft, setDraft] = useState<Filters>(emptyFilters); const [filters, setFilters] = useState<Filters>(emptyFilters); const [page, setPage] = useState(1);
+  const searchParams = useSearchParams();
+  const initialFilters = (): Filters => ({ ...emptyFilters(), member: searchParams.get("member")?.trim().slice(0, 100) ?? "", reference: searchParams.get("reference")?.trim().slice(0, 100) ?? "" });
+  const [draft, setDraft] = useState<Filters>(initialFilters); const [filters, setFilters] = useState<Filters>(initialFilters); const [page, setPage] = useState(1);
   const [data, setData] = useState<LedgerData | null>(null); const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Transaction | null>(null); const [detailOpen, setDetailOpen] = useState(false); const [detailError, setDetailError] = useState<string | null>(null); const [detailLoading, setDetailLoading] = useState(false);
   const query = useMemo(() => ledgerQuery(filters, page), [filters, page]);

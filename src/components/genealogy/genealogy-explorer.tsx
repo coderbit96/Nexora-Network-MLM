@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronRight, RotateCcw, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -24,6 +25,8 @@ function NetworkNode({ node, branch, expanded, loading, onToggle, onMore, branch
 
 export function GenealogyExplorer({ mode }: { mode: "member" | "admin" }) {
   const admin = mode === "admin";
+  const searchParams = useSearchParams();
+  const requestedRoot = admin ? searchParams.get("root")?.trim().slice(0, 32) : undefined;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null); const [branches, setBranches] = useState<Record<string, Branch>>({}); const [expanded, setExpanded] = useState<string[]>([]);
   const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [loading, setLoading] = useState(!admin); const [searching, setSearching] = useState(false); const [loadingNode, setLoadingNode] = useState<string | null>(null); const [failed, setFailed] = useState(false);
   const adminPath = useCallback((operation: string, values: Record<string, string>) => `/api/v1/admin/genealogy?${new URLSearchParams({ operation, ...values }).toString()}`, []);
@@ -31,6 +34,7 @@ export function GenealogyExplorer({ mode }: { mode: "member" | "admin" }) {
   const childPath = useCallback((memberNumber: string, page?: number) => admin ? adminPath("children", { member: memberNumber, ...(page ? { page: String(page) } : {}) }) : `/api/v1/genealogy/children?parent=${encodeURIComponent(memberNumber)}${page ? `&page=${page}` : ""}`, [admin, adminPath]);
   const loadRoot = useCallback(async (memberNumber?: string) => { const path = rootPath(memberNumber); if (!path) { setSnapshot(null); setBranches({}); setExpanded([]); setFailed(false); return; } setLoading(true); setFailed(false); try { const data = await request<Snapshot>(path); setSnapshot(data); setBranches({ [data.root.memberNumber]: data.branch }); setExpanded([]); } catch { setFailed(true); } finally { setLoading(false); } }, [rootPath]);
   useEffect(() => { if (admin) return; const timer = window.setTimeout(() => { void loadRoot(); }, 0); return () => window.clearTimeout(timer); }, [admin, loadRoot]);
+  useEffect(() => { if (!admin || !requestedRoot) return; const timer = window.setTimeout(() => { void loadRoot(requestedRoot); }, 0); return () => window.clearTimeout(timer); }, [admin, requestedRoot, loadRoot]);
   useEffect(() => { if (query.trim().length < 2) return; const timer = window.setTimeout(() => { setSearching(true); const path = admin ? adminPath("search", { q: query.trim() }) : `/api/v1/genealogy/search?q=${encodeURIComponent(query)}`; void request<{ results: SearchResult[] }>(path).then((data) => setResults(data.results)).catch(() => setResults([])).finally(() => setSearching(false)); }, 250); return () => window.clearTimeout(timer); }, [query, admin, adminPath]);
   const toggle = async (node: Node) => { if (expanded.includes(node.memberNumber)) { setExpanded((current) => current.filter((value) => value !== node.memberNumber)); return; } setExpanded((current) => [...current, node.memberNumber]); if (branches[node.memberNumber]) return; setLoadingNode(node.memberNumber); try { const data = await request<Branch>(childPath(node.memberNumber)); setBranches((current) => ({ ...current, [node.memberNumber]: data })); } catch { setFailed(true); } finally { setLoadingNode(null); } };
   const loadMore = async (node: Node) => { const branch = branches[node.memberNumber]; if (!branch) return; try { const data = await request<Branch>(childPath(node.memberNumber, branch.page + 1)); setBranches((current) => ({ ...current, [node.memberNumber]: { ...data, children: [...branch.children, ...data.children] } })); } catch { setFailed(true); } };
