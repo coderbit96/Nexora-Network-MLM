@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { strongPasswordSchema } from "@/lib/validation/password";
+import { firebasePasswordSchema } from "@/lib/validation/password";
 
 const displayNameSchema = z.string().trim().min(2, "Enter a staff name.").max(120);
 const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address.").max(254);
@@ -12,7 +12,9 @@ const referralCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{6,32
 export const createStaffSchema = z.object({
   name: displayNameSchema,
   email: emailSchema,
-  password: strongPasswordSchema,
+  // This is an administrator-set temporary Firebase password. Firebase enforces
+  // its six-character minimum; public registration retains the stronger policy.
+  password: firebasePasswordSchema,
   roleId: roleIdSchema,
   status: statusSchema.default("PENDING"),
   firstName: z.string().trim().min(1, "Enter a first name.").max(80).optional(),

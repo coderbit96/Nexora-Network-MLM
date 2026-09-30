@@ -29,8 +29,8 @@ test("staff payloads reject raw role injection and unrestricted fields", () => {
   assert.equal(createStaffSchema.safeParse({ name: "Unsafe Request", email: "unsafe@example.test", role: "SUPER_ADMIN" }).success, false);
   assert.equal(createStaffSchema.safeParse({ name: "Unsafe Request", email: "unsafe@example.test", roleId: id().toString(), permissions: [PERMISSION.SYSTEM.MANAGE] }).success, false);
   assert.equal(createStaffSchema.safeParse({ name: "No password", email: "staff@example.test", roleId: id().toString(), status: "ACTIVE" }).success, false);
-  assert.equal(createStaffSchema.safeParse({ name: "Weak password", email: "staff@example.test", password: "weakpassword", roleId: id().toString(), status: "ACTIVE" }).success, false);
-  assert.equal(createStaffSchema.safeParse({ name: "Secure account", email: "staff@example.test", password: "SecurePassword123", roleId: id().toString(), status: "ACTIVE" }).success, true);
+  assert.equal(createStaffSchema.safeParse({ name: "Short password", email: "staff@example.test", password: "12345", roleId: id().toString(), status: "ACTIVE" }).success, false);
+  assert.equal(createStaffSchema.safeParse({ name: "Simple password", email: "staff@example.test", password: "simple", roleId: id().toString(), status: "ACTIVE" }).success, true);
   assert.equal(updateStaffSchema.safeParse({ role: "SUPER_ADMIN" }).success, false);
 });
 
