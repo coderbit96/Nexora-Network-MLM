@@ -2,6 +2,7 @@
 
 import { CheckCircle2, CircleX, Eye, LoaderCircle, Play } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Pagination } from "@/components/admin/pagination";
@@ -40,13 +41,15 @@ function ActionIcon({ status }: { status: AdministrativeStatus }) {
 }
 
 export function AdminWithdrawalManager() {
-  const [status, setStatus] = useState<Status | undefined>("PENDING"); const [page, setPage] = useState(1); const [data, setData] = useState<Payload | null>(null); const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const memberFilter = searchParams.get("member")?.trim() ?? "";
+  const [status, setStatus] = useState<Status | undefined>(() => memberFilter ? undefined : "PENDING"); const [page, setPage] = useState(1); const [data, setData] = useState<Payload | null>(null); const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null); const [detailOpen, setDetailOpen] = useState(false); const [detailLoading, setDetailLoading] = useState(false); const [detailError, setDetailError] = useState<string | null>(null);
   const [action, setAction] = useState<{ withdrawal: Withdrawal; status: AdministrativeStatus } | null>(null); const [note, setNote] = useState(""); const [reference, setReference] = useState(""); const [saving, setSaving] = useState(false);
   const load = useCallback(async () => {
-    try { setError(null); setData(await api<Payload>(`/api/v1/admin/withdrawals?${new URLSearchParams({ page: String(page), limit: "25", ...(status ? { status } : {}) })}`)); }
+    try { const params = new URLSearchParams({ page: String(page), limit: "25", ...(status ? { status } : {}) }); if (memberFilter) params.set("member", memberFilter); setError(null); setData(await api<Payload>(`/api/v1/admin/withdrawals?${params}`)); }
     catch (cause) { setData(null); setError(cause instanceof Error ? cause.message : "Withdrawals could not be loaded."); }
-  }, [page, status]);
+  }, [memberFilter, page, status]);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
   const selectTab = (next?: Status) => { setStatus(next); setPage(1); };
   const openDetail = async (id: string) => {
@@ -71,7 +74,7 @@ export function AdminWithdrawalManager() {
   const allCount = Object.values(data.statusCounts).reduce((total, count) => total + (count ?? 0), 0);
 
   return <div className="space-y-6"><Card><CardHeader className="gap-4"><div><CardTitle>Withdrawal operations</CardTitle><CardDescription>Reserved funds are approved, processed, and completed through a controlled financial workflow. Rejections return held funds to the member wallet.</CardDescription></div><div className="flex flex-wrap gap-2" role="tablist" aria-label="Withdrawal status queues">{tabs.map((tab) => <Button key={tab.label} size="sm" role="tab" aria-selected={status === tab.status} variant={status === tab.status ? "default" : "outline"} onClick={() => selectTab(tab.status)}>{tab.label}<span className="rounded bg-background/20 px-1.5 py-0.5 text-xs">{tab.status ? data.statusCounts[tab.status] ?? 0 : allCount}</span></Button>)}</div></CardHeader></Card>
-    <Card><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>{status ? `${status[0]}${status.slice(1).toLowerCase()} withdrawals` : "All withdrawals"}</CardTitle><CardDescription>{data.pagination.total.toLocaleString("en-IN")} requests in this queue. Cancelled requests remain visible from the All queue for audit history.</CardDescription></div>{data.canExport ? <Button asChild variant="outline"><a href={`/api/v1/admin/withdrawals/export${status ? `?status=${status}` : ""}`}>Export CSV</a></Button> : null}</CardHeader><CardContent>{data.withdrawals.length ? <>
+    <Card><CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>{status ? `${status[0]}${status.slice(1).toLowerCase()} withdrawals` : "All withdrawals"}</CardTitle><CardDescription>{data.pagination.total.toLocaleString("en-IN")} requests in this queue{memberFilter ? ` for ${memberFilter}` : ""}. Cancelled requests remain visible from the All queue for audit history.</CardDescription></div>{data.canExport ? <Button asChild variant="outline"><a href={`/api/v1/admin/withdrawals/export${new URLSearchParams({ ...(status ? { status } : {}), ...(memberFilter ? { member: memberFilter } : {}) })}`}>Export CSV</a></Button> : null}</CardHeader><CardContent>{data.withdrawals.length ? <>
       <div className="grid gap-3 lg:hidden">{data.withdrawals.map((withdrawal) => <WithdrawalCard key={withdrawal.id} withdrawal={withdrawal} onDetail={openDetail} onAction={openAction} />)}</div>
       <div className="hidden overflow-x-auto lg:block"><Table><TableHeader><TableRow>{["Withdrawal ID", "Member", "Amount", "Payment method", "Requested at", "Status", "Reviewer", "Actions"].map((heading) => <TableHead key={heading}>{heading}</TableHead>)}</TableRow></TableHeader><TableBody>{data.withdrawals.map((withdrawal) => <TableRow key={withdrawal.id}><TableCell className="max-w-28 truncate font-mono text-xs" title={withdrawal.id}>{withdrawal.id}</TableCell><TableCell><button className="text-left hover:text-primary" onClick={() => void openDetail(withdrawal.id)}><p className="font-medium">{withdrawal.member?.name ?? "Unknown member"}</p><p className="text-xs text-muted-foreground">{withdrawal.member?.memberNumber ?? "Unavailable"}</p></button></TableCell><TableCell className="font-semibold">{formatCurrency(withdrawal.amountMinor, withdrawal.currency)}</TableCell><TableCell><p className="text-sm">{withdrawal.destination.paymentMethod}</p><p className="text-xs text-muted-foreground">{withdrawal.destination.accountLast4}</p></TableCell><TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatDateTime(withdrawal.requestedAt)}</TableCell><TableCell><StatusBadge status={withdrawal.status} /></TableCell><TableCell className="max-w-36"><p className="truncate text-sm" title={withdrawal.reviewer?.email}>{withdrawal.reviewer?.name ?? "Not reviewed"}</p></TableCell><TableCell><div className="flex min-w-max justify-end gap-2"><Button size="sm" variant="outline" onClick={() => void openDetail(withdrawal.id)}><Eye className="size-4" />View</Button>{withdrawal.allowedTransitions.map((next) => <Button key={next} size="sm" variant={next === "REJECTED" ? "destructive" : "outline"} onClick={() => openAction(withdrawal, next)}><ActionIcon status={next} />{actionLabel(next)}</Button>)}</div></TableCell></TableRow>)}</TableBody></Table></div>
       <Pagination className="mt-5" page={data.pagination.page} total={data.pagination.total} totalPages={data.pagination.totalPages} onPageChange={setPage} />

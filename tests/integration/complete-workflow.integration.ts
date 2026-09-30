@@ -21,8 +21,9 @@ import { getMemberDashboard } from "@/services/dashboard/member-dashboard";
 import { GenealogyService } from "@/services/genealogy/genealogy";
 import { MemberManagementService } from "@/services/members/member-management-service";
 import { memberOrders } from "@/services/orders/order-query";
+import { getAdminOrderPage } from "@/services/orders/admin-order-query";
 import { getReportPage } from "@/services/reports/report-service";
-import { getAdminWithdrawalDetail } from "@/services/withdrawal/admin-withdrawal-query";
+import { getAdminWithdrawalDetail, getAdminWithdrawalPage } from "@/services/withdrawal/admin-withdrawal-query";
 import { getWalletLedgerPage } from "@/services/wallet/wallet-ledger-service";
 import { getWalletOverview, getWalletTransactionPage } from "@/services/wallet/wallet-query";
 
@@ -207,12 +208,16 @@ test("database E2E: referral registration, verified payment, commissions, and wi
 
     // These read services back the real screens. They must agree with the
     // canonical models above rather than reconstructing a separate view model.
-    const [withdrawalDetail, ledgerPage, memberBTransactions, memberDashboard, ordersPage, commissionReport, walletReport, withdrawalReport, salesReport, ordersReport, memberReport, referralReport] = await Promise.all([
+    const [withdrawalDetail, adminMemberWithdrawals, ledgerPage, commissionLedgerEntry, memberBTransactions, memberDashboard, ordersPage, adminMemberOrders, adminExactOrder, commissionReport, walletReport, withdrawalReport, salesReport, ordersReport, memberReport, referralReport] = await Promise.all([
       getAdminWithdrawalDetail(request.id),
+      getAdminWithdrawalPage({ page: 1, limit: 25, member: "MLM000002" }),
       getWalletLedgerPage({ page: 1, limit: 25, member: "MLM000002" }),
+      getWalletLedgerPage({ page: 1, limit: 25, reference: String(commissions[0]?.walletTransactionId) }),
       getWalletTransactionPage(memberB.profileId, { page: 1, limit: 25 }),
       getMemberDashboard(memberB.profileId, "https://example.test"),
       memberOrders(memberC.profileId, { page: 1, limit: 25 }),
+      getAdminOrderPage({ page: 1, limit: 25, member: "MLM000003" }),
+      getAdminOrderPage({ page: 1, limit: 25, orderId: new Types.ObjectId(checkout.orderId) }),
       getReportPage("commissions", { page: 1, limit: 25, memberNumber: "MLM000002" }),
       getReportPage("wallet-transactions", { page: 1, limit: 25, memberNumber: "MLM000002" }),
       getReportPage("withdrawals", { page: 1, limit: 25, memberNumber: "MLM000002" }),
@@ -224,7 +229,12 @@ test("database E2E: referral registration, verified payment, commissions, and wi
     assert.equal(withdrawalDetail.status, "COMPLETED");
     assert.equal(withdrawalDetail.paymentReference, "E2E-PAYOUT-001");
     assert.equal(withdrawalDetail.wallet?.availableMinor, "500");
+    assert.equal(adminMemberWithdrawals.pagination.total, 1, "Member Detail's Withdrawals link must scope the administration list to that member");
+    assert.equal(adminMemberWithdrawals.withdrawals[0]?.id, request.id);
+    assert.equal(adminMemberWithdrawals.statusCounts.COMPLETED, 1, "Filtered withdrawal queue counters must not include other members");
     assert.equal(ledgerPage.pagination.total, 4, "Wallet Ledger must include each of B's immutable movements");
+    assert.equal(commissionLedgerEntry.pagination.total, 1, "A Commission-to-Ledger link must resolve its exact immutable transaction");
+    assert.equal(commissionLedgerEntry.items[0]?.id, String(commissions[0]?.walletTransactionId));
     assert.equal(memberBTransactions.total, 4, "Member wallet history must agree with the platform ledger");
     const commissionCreditMinor = ledgerPage.items
       .filter((entry) => entry.type === "DIRECT_COMMISSION" || entry.type === "LEVEL_COMMISSION")
@@ -238,6 +248,9 @@ test("database E2E: referral registration, verified payment, commissions, and wi
     assert.equal(memberDashboard.metrics.directReferrals, 1);
     assert.equal(ordersPage.total, 2, "Member order history must include the settled order and the later pending-payment order");
     assert.ok(ordersPage.orders.some((entry) => entry.paymentStatus === "SUCCESS"), "Member order history must include the paid order");
+    assert.equal(adminMemberOrders.pagination.total, 2, "Member Detail's Orders link must scope the administration list to that member");
+    assert.equal(adminExactOrder.pagination.total, 1, "Commission-to-Order links must scope the administration list to the exact order");
+    assert.equal(adminExactOrder.orders[0]?.id, checkout.orderId);
     assert.equal(commissionReport.pagination.total, 2);
     assert.equal(walletReport.pagination.total, 4);
     assert.equal(withdrawalReport.pagination.total, 1);

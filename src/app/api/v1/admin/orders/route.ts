@@ -1,9 +1,9 @@
 import { PERMISSION } from "@/config/permissions";
-import { Types } from "mongoose";
 import { apiSuccess, withApiErrorHandling } from "@/lib/api";
 import { requirePermission } from "@/lib/auth/authorization";
-import { errors } from "@/lib/errors/app-error";
-import { MemberProfile, Order } from "@/models";
-import { parseOrderFilters, serializeOrder } from "@/services/orders/order-query";
+import { getAdminOrderPage, parseAdminOrderFilters } from "@/services/orders/admin-order-query";
 
-export const GET = withApiErrorHandling(async (request: Request) => { await requirePermission(PERMISSION.ORDERS.VIEW_ALL, request); const url = new URL(request.url); const filters = parseOrderFilters(url.searchParams); const member = url.searchParams.get("member")?.trim().slice(0, 100); const orderId = url.searchParams.get("order")?.trim(); if (orderId && !Types.ObjectId.isValid(orderId)) throw errors.badRequest("Invalid order identifier."); const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); const matchingProfiles = member ? await MemberProfile.find({ $or: [{ memberNumber: new RegExp(escapeRegex(member), "i") }, { firstName: new RegExp(escapeRegex(member), "i") }, { lastName: new RegExp(escapeRegex(member), "i") }] }).select("_id").limit(1_000).lean() : []; const query = { ...(filters.status ? { status: filters.status } : {}), ...(member ? { memberProfileId: { $in: matchingProfiles.map((profile) => profile._id) } } : {}), ...(orderId ? { _id: orderId } : {}) }; const [orders, total] = await Promise.all([Order.find(query).sort({ createdAt: -1, _id: -1 }).skip((filters.page - 1) * filters.limit).limit(filters.limit).lean(), Order.countDocuments(query)]); const profiles = orders.length ? await MemberProfile.find({ _id: { $in: orders.map((order) => order.memberProfileId) } }).select("memberNumber firstName lastName").lean() : []; const byId = new Map(profiles.map((profile) => [String(profile._id), profile])); return apiSuccess({ orders: orders.map((order) => ({ ...serializeOrder(order), member: (() => { const profile = byId.get(String(order.memberProfileId)); return profile ? { id: String(profile._id), memberNumber: profile.memberNumber, name: `${profile.firstName} ${profile.lastName}` } : null; })() })), pagination: { total, page: filters.page, limit: filters.limit, totalPages: Math.max(1, Math.ceil(total / filters.limit)) } }); });
+export const GET = withApiErrorHandling(async (request: Request) => {
+  await requirePermission(PERMISSION.ORDERS.VIEW_ALL, request);
+  return apiSuccess(await getAdminOrderPage(parseAdminOrderFilters(new URL(request.url).searchParams)));
+});

@@ -47,10 +47,20 @@ async function relatedPeople(withdrawals: AdminWithdrawal[]) {
 }
 
 export async function getAdminWithdrawalPage(filters: WithdrawalFilters) {
-  const page = await getWithdrawalPage(filters);
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matchingProfiles = filters.member ? await MemberProfile.find({ $or: [
+    { memberNumber: new RegExp(escapeRegex(filters.member), "i") },
+    { firstName: new RegExp(escapeRegex(filters.member), "i") },
+    { lastName: new RegExp(escapeRegex(filters.member), "i") },
+  ] }).select("_id").limit(1_000).lean() : undefined;
+  const page = await getWithdrawalPage(filters, matchingProfiles?.map((profile) => profile._id));
+  const countMatch = matchingProfiles ? { memberProfileId: { $in: matchingProfiles.map((profile) => profile._id) } } : {};
   const [people, counts] = await Promise.all([
     relatedPeople(page.withdrawals),
-    Withdrawal.aggregate<{ _id: WithdrawalStatus; count: number }>([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+    Withdrawal.aggregate<{ _id: WithdrawalStatus; count: number }>([
+      ...(Object.keys(countMatch).length ? [{ $match: countMatch }] : []),
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]),
   ]);
   return {
     withdrawals: page.withdrawals.map((withdrawal) => serialize(withdrawal, people.members, people.users)),

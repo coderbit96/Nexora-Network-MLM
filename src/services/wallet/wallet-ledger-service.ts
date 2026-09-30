@@ -111,7 +111,13 @@ async function buildLedgerQuery(filters: WalletLedgerFilters): Promise<Record<st
   if (filters.from || filters.to) clauses.push({ createdAt: { ...(filters.from ? { $gte: filters.from } : {}), ...(filters.to ? { $lte: filters.to } : {}) } });
   if (filters.reference) {
     const regex = new RegExp(escapeRegex(filters.reference), "i");
-    clauses.push({ $or: [{ referenceType: regex }, { referenceId: regex }] });
+    clauses.push({
+      $or: [
+        { referenceType: regex },
+        { referenceId: regex },
+        ...(Types.ObjectId.isValid(filters.reference) ? [{ _id: new Types.ObjectId(filters.reference) }] : []),
+      ],
+    });
   }
   if (filters.minAmountMinor !== undefined || filters.maxAmountMinor !== undefined) {
     clauses.push({ amountMinor: { ...(filters.minAmountMinor !== undefined ? { $gte: filters.minAmountMinor } : {}), ...(filters.maxAmountMinor !== undefined ? { $lte: filters.maxAmountMinor } : {}) } });

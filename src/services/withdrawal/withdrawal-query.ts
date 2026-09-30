@@ -8,19 +8,21 @@ import type { WithdrawalStatus } from "@/types/domain";
 import { MAX_INTERACTIVE_PAGE } from "@/config/pagination";
 
 const statuses: readonly WithdrawalStatus[] = ["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED", "CANCELLED"];
-export type WithdrawalFilters = { status?: WithdrawalStatus; page: number; limit: number };
+export type WithdrawalFilters = { status?: WithdrawalStatus; member?: string; page: number; limit: number };
 
 export function parseWithdrawalFilters(params: URLSearchParams): WithdrawalFilters {
   const status = params.get("status") || undefined;
+  const member = params.get("member")?.trim().slice(0, 100) || undefined;
   if (status && !statuses.includes(status as WithdrawalStatus)) throw errors.badRequest("Invalid withdrawal status.");
   const parse = (value: string | null, fallback: number) => value === null ? fallback : /^\d+$/.test(value) ? Number(value) : Number.NaN;
   const page = parse(params.get("page"), 1); const limit = parse(params.get("limit"), 20);
   if (!Number.isSafeInteger(page) || !Number.isSafeInteger(limit) || page < 1 || page > MAX_INTERACTIVE_PAGE || limit < 1 || limit > 100) throw errors.badRequest("Invalid withdrawal pagination.");
-  return { ...(status ? { status: status as WithdrawalStatus } : {}), page, limit };
+  return { ...(status ? { status: status as WithdrawalStatus } : {}), ...(member ? { member } : {}), page, limit };
 }
 
-export async function getWithdrawalPage(filters: WithdrawalFilters, memberProfileId?: Types.ObjectId) {
-  const query = { ...(memberProfileId ? { memberProfileId } : {}), ...(filters.status ? { status: filters.status } : {}) };
+export async function getWithdrawalPage(filters: WithdrawalFilters, memberProfileId?: Types.ObjectId | Types.ObjectId[]) {
+  const memberScope = Array.isArray(memberProfileId) ? { memberProfileId: { $in: memberProfileId } } : memberProfileId ? { memberProfileId } : {};
+  const query = { ...memberScope, ...(filters.status ? { status: filters.status } : {}) };
   const [withdrawals, total] = await Promise.all([
     Withdrawal.find(query).sort({ createdAt: -1, _id: -1 }).skip((filters.page - 1) * filters.limit).limit(filters.limit).lean(),
     Withdrawal.countDocuments(query),
