@@ -8,8 +8,8 @@ import type { WithdrawalStatus } from "@/types/domain";
 import { getWithdrawalPage, type WithdrawalFilters } from "@/services/withdrawal/withdrawal-query";
 
 type AdminWithdrawal = Awaited<ReturnType<typeof getWithdrawalPage>>["withdrawals"][number];
-type Person = { name: string; email: string };
-type Member = { memberNumber: string; name: string };
+type Person = { id: string; name: string; email: string };
+type Member = { id: string; memberNumber: string; name: string };
 
 function destination(withdrawal: AdminWithdrawal) {
   const last4 = typeof withdrawal.destinationSnapshot.accountLast4 === "string" ? withdrawal.destinationSnapshot.accountLast4 : "";
@@ -41,8 +41,8 @@ async function relatedPeople(withdrawals: AdminWithdrawal[]) {
     reviewerIds.length ? User.find({ _id: { $in: reviewerIds } }).select("displayName email").lean() : [],
   ]);
   return {
-    members: new Map(profiles.map((profile) => [String(profile._id), { memberNumber: profile.memberNumber, name: `${profile.firstName} ${profile.lastName}`.trim() }])),
-    users: new Map(users.map((user) => [String(user._id), { name: user.displayName, email: user.email }])),
+    members: new Map(profiles.map((profile) => [String(profile._id), { id: String(profile._id), memberNumber: profile.memberNumber, name: `${profile.firstName} ${profile.lastName}`.trim() }])),
+    users: new Map(users.map((user) => [String(user._id), { id: String(user._id), name: user.displayName, email: user.email }])),
   };
 }
 
